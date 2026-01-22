@@ -2,8 +2,6 @@
 
 ## Payments with Stripe: Athletic Events Ticketing and Onsiste Registration Platform
 
-**Mentor 1** **Mentor 2**
-
 ## Project Description
 
 Stripe is an Irish-American multinational financial services company that primarily ohers payment-processing software for e-commerce websites and mobile applications. For this project, students will take on the role of a sporting event organizer (like Bear Races or Let's Do This) that is creating a hosted web-application to create events and sell tickets using Stripe APIs! The MVP should include a user management system that allows:
@@ -28,4 +26,4 @@ A more sophisticated system would:
 - Implement customizable data visualizations that allow organizers to analyze live ticket sales, revenue totals, attendee demographics and check-in rates.
 - Have automated CI/CD for tests.
 
-**Stack: Next.js + Vercel + Supabase + Stripe**
+**Chosen stack: Next.js + Vercel + Supabase + Stripe**
