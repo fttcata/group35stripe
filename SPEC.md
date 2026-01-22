@@ -4,15 +4,15 @@
 
 ## Project Description
 
-Stripe is an Irish-American multinational financial services company that primarily ohers payment-processing software for e-commerce websites and mobile applications. For this project, students will take on the role of a sporting event organizer (like Bear Races or Let's Do This) that is creating a hosted web-application to create events and sell tickets using Stripe APIs! The MVP should include a user management system that allows:
+Stripe is an Irish-American multinational financial services company that primarily others payment-processing software for e-commerce websites and mobile applications. For this project, students will take on the role of a sporting event organizer (like Bear Races or Let's Do This) that is creating a hosted web-application to create events and sell tickets using Stripe APIs! The MVP should include a user management system that allows:
 
 - Organizers to create/manage events and define ticket prices/quantities.
 - Attendees to browse and sign up for events, purchase tickets, and check-in on event day.
-- Event stah to register pre-booked attendees and accept payments onsite.
+- Event staff to register pre-booked attendees and accept payments onsite.
 
 Here is a breakdown of the project requirements:
 
-- An event management system that allows organizers to add titles, descriptions, venues, images, etc. Organizers should be able to define ticket types (e.g., General, Student, Over 60s) with diherent prices and quantities.
+- An event management system that allows organizers to add titles, descriptions, venues, images, etc. Organizers should be able to define ticket types (e.g., General, Student, Over 60s) with different prices and quantities.
 - A ticket purchasing system that allows consumers to create an account or checkout as a guest and receive tickets via email. Users should be able to decide whether they want to "pay now" (i.e., when booking the tickets) or "pay on the day" (i.e., pay at registration on the day of the event).
 - A registration system that allows event stah to look up attendees by name, ticket ID, or scanning a QR code and mark them as checked-in. Any "pay on the day" tickets should be paid for using a Stripe Terminal which will be provided to the team.
 - Utilise Stripe billing to add a subscription payment option (e.g. early access to race entry for members).
