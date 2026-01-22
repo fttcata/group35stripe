@@ -1,0 +1,7 @@
+stages:
+  - placeholder
+
+placeholder_job:
+  stage: placeholder
+  script:
+    - echo "Placeholder CI/CD job - does nothing for now"
