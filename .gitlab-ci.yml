@@ -1,7 +1,29 @@
 stages:
-  - placeholder
+  - deploy
 
-placeholder_job:
-  stage: placeholder
+variables:
+  VERCEL_ORG_ID: $VERCEL_ORG_ID
+  VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
+
+deploy_preview:
+  stage: deploy
+  image: node:20
+  only:
+    - merge_requests
+    - develop
   script:
-    - echo "Placeholder CI/CD job - does nothing for now"
+    - npm install --global vercel
+    - vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
+    - vercel build --token=$VERCEL_TOKEN
+    - vercel deploy --prebuilt --token=$VERCEL_TOKEN
+
+deploy_production:
+  stage: deploy
+  image: node:20
+  only:
+    - main
+  script:
+    - npm install --global vercel
+    - vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+    - vercel build --prod --token=$VERCEL_TOKEN
+    - vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
