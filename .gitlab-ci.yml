@@ -1,5 +1,8 @@
 # GitLab CI/CD configuration (currently disabled)
-# Uncomment to enable automatic deployment to Vercel
+# Uncomment the sections below to enable automatic deployment to Vercel
+
+# Placeholder to maintain valid YAML syntax
+.disabled: {}
 
 # stages:
 #   - deploy
