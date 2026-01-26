@@ -2,7 +2,7 @@ export type Event = {
   title: string
   description: string
   date: string // ISO date (YYYY-MM-DD)
-  image: string
+  image?: string
   location?: string
   distance?: string
   rating?: number
@@ -11,31 +11,30 @@ export type Event = {
 // Primary export: structured event objects
 export const events: Event[] = [
   {
-    title: 'NAME_PLACEHOLDER_01',
-    description: 'DESC_PLACEHOLDER_01',
+    title: 'City Marathon 2026',
+    description: 'Annual full marathon through downtown streets. A challenging 26.2-mile course showcasing our city\'s most iconic landmarks and neighborhoods.',
     date: '2026-02-10',
-    image: '/events/event1.svg',
-    location: 'LOCATION_PLACEHOLDER_01',
-    distance: 'DISTANCE_PLACEHOLDER_01',
-    rating: 0,
+    location: 'Downtown Starting Line',
+    distance: '26.2 miles',
+    rating: 4.8,
   },
   {
-    title: 'NAME_PLACEHOLDER_02',
-    description: 'DESC_PLACEHOLDER_02',
+    title: 'Spring Trail Half Marathon',
+    description: 'Scenic half marathon winding through beautiful forest trails and riverside paths. Perfect for runners seeking a mix of challenge and natural beauty.',
     date: '2026-03-05',
     image: '/events/event2.svg',
-    location: 'LOCATION_PLACEHOLDER_02',
-    distance: 'DISTANCE_PLACEHOLDER_02',
-    rating: 0,
+    location: 'Riverside Park Entrance',
+    distance: '13.1 miles',
+    rating: 4.9,
   },
   {
-    title: 'NAME_PLACEHOLDER_03',
-    description: 'DESC_PLACEHOLDER_03',
+    title: 'Charity 5K Color Run',
+    description: 'Fun family-friendly 5K featuring color stations along the route. All proceeds benefit local children\'s hospitals. Walkers welcome!',
     date: '2026-04-12',
     image: '/events/event3.svg',
-    location: 'LOCATION_PLACEHOLDER_03',
-    distance: 'DISTANCE_PLACEHOLDER_03',
-    rating: 0,
+    location: 'Community Sports Complex',
+    distance: '3.1 miles',
+    rating: 4.6,
   },
 ]
 
