@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <rect width="1200" height="800" fill="#FFF5F7"/>
+  <rect x="80" y="80" width="1040" height="640" rx="24" fill="#C53030" opacity="0.10"/>
+  <text x="120" y="220" font-size="56" fill="#922020" font-family="Arial, Helvetica, sans-serif">Design Systems</text>
+  <text x="120" y="300" font-size="28" fill="#922020">Workshop on tokens & components.</text>
+</svg>
