@@ -51,7 +51,7 @@ Add these **Environment Variables** in Vercel (Project → Settings → Environm
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-Deploy, then copy the deployment URL.
+Deploy, then copy the deployment URL
 
 ### Step 4: Test end-to-end deployment
 
