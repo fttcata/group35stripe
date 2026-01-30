@@ -1,4 +1,5 @@
 import EventCard from '../components/EventCard'
+import EventMap from '../components/EventMap'
 import { events as eventsData } from './data'
 
 function monthKey(dateStr: string) {
@@ -45,42 +46,54 @@ export default function EventsPage() {
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-purple-50 to-transparent"></div>
       </div>
-
-      {/* Events Section */}
-      <section className="max-w-6xl mx-auto px-4 py-12 space-y-12">
-        {Object.entries(grouped).map(([month, items], idx) => (
-          <div 
-            key={month}
-            className="animate-fade-in-up"
-            style={{ animationDelay: `${idx * 100}ms` }}
-          >
-            <div className="flex items-center gap-4 mb-6">
-              <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full px-6 py-2 shadow-lg">
-                <h2 className="text-xl font-bold">{month}</h2>
-              </div>
-              <div className="flex-1 h-px bg-gradient-to-r from-purple-300 to-transparent"></div>
-            </div>
-            <div className="flex flex-wrap justify-center gap-6">
-              {items.map((e, cardIdx) => (
-                <div 
-                  key={e.title}
-                  className="animate-fade-in-up w-full md:w-[calc(50%-0.75rem)] max-w-lg"
-                  style={{ animationDelay: `${(idx * 100) + (cardIdx * 50)}ms` }}
-                >
-                  <EventCard
-                    title={e.title}
-                    description={e.description}
-                    date={e.date}
-                    image={e.image}
-                    location={e.location}
-                    distance={e.distance}
-                    rating={e.rating}
-                  />
+      
+      {/* Events + Map Section (two-column on md+) */}
+      <section className="max-w-6xl mx-auto px-4 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Left: Events list (1/3) */}
+          <div className="md:col-span-1 space-y-12">
+            {Object.entries(grouped).map(([month, items], idx) => (
+              <div 
+                key={month}
+                className="animate-fade-in-up"
+                style={{ animationDelay: `${idx * 100}ms` }}
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full px-6 py-2 shadow-lg">
+                    <h2 className="text-xl font-bold">{month}</h2>
+                  </div>
+                  <div className="flex-1 h-px bg-gradient-to-r from-purple-300 to-transparent"></div>
                 </div>
-              ))}
-            </div>
+                <div className="flex flex-col gap-6">
+                  {items.map((e, cardIdx) => (
+                    <div 
+                      key={e.title}
+                      className="animate-fade-in-up w-full"
+                      style={{ animationDelay: `${(idx * 100) + (cardIdx * 50)}ms` }}
+                    >
+                      <EventCard
+                        title={e.title}
+                        description={e.description}
+                        date={e.date}
+                        image={e.image}
+                        location={e.location}
+                        distance={e.distance}
+                        rating={e.rating}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+
+          {/* Right: Map (2/3) */}
+          <aside className="md:col-span-2">
+            <div className="sticky top-24">
+              <EventMap items={eventsData} />
+            </div>
+          </aside>
+        </div>
       </section>
     </main>
   )
