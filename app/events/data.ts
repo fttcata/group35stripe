@@ -8,8 +8,12 @@ export type Event = {
   title: string
   description: string
   date: string // ISO date (YYYY-MM-DD)
+  startTime?: string
+  endTime?: string
+  sportCategory?: 'Running' | 'Football' | 'Basketball' | 'Tennis' | 'Swimming' | 'Cycling' | 'Other'
   image?: string
   location?: string
+  locationUrl?: string
   distance?: string
   rating?: number
   lat?: number
@@ -20,6 +24,7 @@ export type Event = {
 // Primary export: structured event objects
 export const events: Event[] = [
   {
+    slug: 'dublin-city-marathon',
     title: 'Dublin City Marathon',
     description: "Annual full marathon through Dublin city centre. A challenging 26.2-mile race showcasing landmarks and local support.",
     date: '2026-02-10',
@@ -31,6 +36,7 @@ export const events: Event[] = [
     lng: -6.2603,
   },
   {
+    slug: 'cork-half-marathon',
     title: 'Cork Half Marathon',
     description: 'Scenic half marathon around Cork city and waterfront — great for experienced and emerging runners alike.',
     date: '2026-03-05',
@@ -42,6 +48,7 @@ export const events: Event[] = [
     lng: -8.4756,
   },
   {
+    slug: 'wicklow-trail-run',
     title: 'Wicklow Trail Run',
     description: 'Trail running event in the Wicklow mountains with mixed terrain and stunning views—suitable for trail enthusiasts.',
     date: '2026-04-12',

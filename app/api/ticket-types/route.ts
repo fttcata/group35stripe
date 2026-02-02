@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { supabase } from '../../../lib/supabaseClient'
 
 export async function GET(request: Request) {
+  if (!supabase) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
+  }
   try {
     const params = new URL(request.url).searchParams
     const event_id = params.get('event_id')

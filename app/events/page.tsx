@@ -1,6 +1,10 @@
+'use client'
+
+import dynamic from 'next/dynamic'
 import EventCard from '../components/EventCard'
-import EventMap from '../components/EventMap'
 import { events as eventsData } from './data'
+
+const EventMap = dynamic(() => import('../components/EventMap'), { ssr: false })
 
 function monthKey(dateStr: string) {
   const d = new Date(dateStr)
@@ -72,6 +76,7 @@ export default function EventsPage() {
                       style={{ animationDelay: `${(idx * 100) + (cardIdx * 50)}ms` }}
                     >
                       <EventCard
+                        slug={e.slug || e.title.toLowerCase().replace(/\s+/g, '-')}
                         title={e.title}
                         description={e.description}
                         date={e.date}

@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { events as eventsData, type Event } from "../events/data"
 
@@ -21,7 +21,7 @@ function formatDate(d: string) {
 	}
 }
 
-export default function EventDetailsPage() {
+function EventDetailsContent() {
   const searchParams = useSearchParams()
   const slug = searchParams.get("slug")
   
@@ -279,5 +279,13 @@ export default function EventDetailsPage() {
 				</div>
 			</div>
 		</main>
+	)
+}
+
+export default function EventDetailsPage() {
+	return (
+		<Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+			<EventDetailsContent />
+		</Suspense>
 	)
 }

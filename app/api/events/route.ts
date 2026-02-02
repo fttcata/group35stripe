@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { supabase } from '../../../lib/supabaseClient'
 
 export async function GET() {
+  if (!supabase) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 })
+  }
   try {
     const { data, error } = await supabase
       .from('events')

@@ -23,6 +23,7 @@ export default function FeaturedEvents() {
           {items.map((e) => (
             <EventCard
               key={e.title}
+              slug={e.slug || e.title.toLowerCase().replace(/\s+/g, '-')}
               title={e.title}
               description={e.description}
               date={e.date}
