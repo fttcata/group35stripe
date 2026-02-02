@@ -1,5 +1,72 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Automatic deployment (GitLab → GitHub mirror → Vercel)
+
+This project is deployed automatically on every push using this flow:
+
+- **GitLab (self-hosted)**: primary repo you push to
+- **GitHub**: mirror destination (GitLab pushes here automatically)
+- **Vercel**: connected to the GitHub repo and auto-deploys on new commits
+
+### Step 1: Create the GitHub repository
+
+- Create a new **public** GitHub repository (e.g. `group35stripe`)
+- Copy the repo URL (example): `https://github.com/<username>/group35stripe.git`
+- Create a GitHub Personal Access Token (classic):
+  - GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+  - **Generate new token (classic)**
+  - Scopes: **repo** (all)
+  - Copy the token (you’ll use it in the mirror URL)
+
+### Step 2: Set up the GitLab mirror (push direction)
+
+In your GitLab project:
+
+- Go to **Settings → Repository → Mirroring repositories**
+- Configure:
+  - **Git repository URL**:
+    - `https://<YOUR_GITHUB_TOKEN>@github.com/<username>/group35stripe.git`
+  - **Mirror direction**: **Push**
+  - **Authentication method**: **Password** (leave password blank — token is in the URL)
+- Click **Mirror repository**
+
+**Quick test**
+
+- Push a commit to GitLab (to your deployment branch, typically `main`)
+- Verify the commit appears on GitHub within ~1 minute
+
+### Step 3: Connect the GitHub repo to Vercel
+
+- Go to Vercel and create a new project
+- **Import Git Repository** → select your GitHub repo
+- Configure:
+  - **Framework Preset**: Next.js (auto-detected)
+  - **Root Directory**: `./` (default)
+  - **Build Command**: `npm run build` (default)
+
+Add these **Environment Variables** in Vercel (Project → Settings → Environment Variables):
+
+- `STRIPE_SECRET_KEY`
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Deploy, then copy the deployment URL
+
+### Step 4: Test end-to-end deployment
+
+- Make a small change in GitLab (e.g. edit this `README.md`)
+- Push to `main`
+- Confirm:
+  - GitHub mirror updates within ~1 minute
+  - Vercel triggers a new deployment within ~2–3 minutes
+  - The change appears at your Vercel URL
+
+### Notes
+
+- If Vercel isn’t deploying, confirm it’s connected to the **GitHub** repo (not GitLab) and that you’re pushing to the branch Vercel is set to deploy (commonly `main`).
+- The `.gitlab-ci.yml` in this repo is currently a placeholder and is **not** required for the GitLab→GitHub mirror→Vercel flow.
+
 ## Getting Started
 
 First, run the development server:
