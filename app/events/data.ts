@@ -4,76 +4,53 @@ export type TicketType = {
 }
 
 export type Event = {
-  slug: string
+  slug?: string
   title: string
   description: string
   date: string // ISO date (YYYY-MM-DD)
-  startTime: string // HH:MM format
-  endTime: string // HH:MM format
-  sportCategory: 'Running' | 'Football' | 'Basketball' | 'Tennis' | 'Swimming' | 'Cycling' | 'Other'
   image?: string
   location?: string
-  locationUrl?: string // Google Maps or other navigation URL
   distance?: string
   rating?: number
-  ticketTypes: TicketType[] // Array of ticket types with prices
+  lat?: number
+  lng?: number
+  ticketTypes?: TicketType[]
 }
 
 // Primary export: structured event objects
 export const events: Event[] = [
   {
-    slug: 'city-marathon-2026',
-    title: 'City Marathon 2026',
-    description: 'Annual full marathon through downtown streets. A challenging 26.2-mile course showcasing our city\'s most iconic landmarks and neighborhoods.',
+    title: 'Dublin City Marathon',
+    description: "Annual full marathon through Dublin city centre. A challenging 26.2-mile race showcasing landmarks and local support.",
     date: '2026-02-10',
-    startTime: '07:00',
-    endTime: '14:00',
-    sportCategory: 'Running',
-    image: 'https://picsum.photos/600/400?random=1',
+    image: 'https://placehold.co/600x400/6366f1/ffffff?text=City+Marathon',
     location: 'Downtown Starting Line',
-    locationUrl: 'https://maps.google.com',
     distance: '26.2 miles',
     rating: 4.8,
-    ticketTypes: [
-      { name: 'General', price: 45 },
-      { name: 'Student', price: 30 },
-      { name: 'Over 60s', price: 25 },
-    ],
+    lat: 53.3498,
+    lng: -6.2603,
   },
   {
-    slug: 'spring-trail-half-marathon',
-    title: 'Spring Trail Half Marathon',
-    description: 'Scenic half marathon winding through beautiful forest trails and riverside paths. Perfect for runners seeking a mix of challenge and natural beauty.',
+    title: 'Cork Half Marathon',
+    description: 'Scenic half marathon around Cork city and waterfront — great for experienced and emerging runners alike.',
     date: '2026-03-05',
-    startTime: '08:00',
-    endTime: '12:00',
-    sportCategory: 'Running',
-    image: 'https://picsum.photos/600/400?random=2',
+    image: 'https://placehold.co/600x400/10b981/ffffff?text=Trail+Half+Marathon',
     location: 'Riverside Park Entrance',
-    locationUrl: 'https://maps.google.com',
     distance: '13.1 miles',
     rating: 4.9,
-    ticketTypes: [
-      { name: 'General', price: 35 },
-      { name: 'Student', price: 25 },
-    ],
+    lat: 51.8985,
+    lng: -8.4756,
   },
   {
-    slug: 'charity-5k-color-run',
-    title: 'Charity 5K Color Run',
-    description: 'Fun family-friendly 5K featuring color stations along the route. All proceeds benefit local children\'s hospitals. Walkers welcome!',
+    title: 'Wicklow Trail Run',
+    description: 'Trail running event in the Wicklow mountains with mixed terrain and stunning views—suitable for trail enthusiasts.',
     date: '2026-04-12',
-    startTime: '09:00',
-    endTime: '11:00',
-    sportCategory: 'Running',
-    image: 'https://picsum.photos/600/400?random=3',
+    image: 'https://placehold.co/600x400/ec4899/ffffff?text=Color+Run+5K',
     location: 'Community Sports Complex',
-    locationUrl: 'https://maps.google.com',
     distance: '3.1 miles',
     rating: 4.6,
-    ticketTypes: [
-      { name: 'Full Price', price: 20 },
-    ],
+    lat: 52.9866,
+    lng: -6.0416,
   },
 ]
 
