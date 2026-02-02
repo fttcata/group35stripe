@@ -21,9 +21,14 @@ type Props = {
   ticketTypes?: TicketType[]
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 function formatDate(d: string) {
   try {
-    return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    const date = new Date(d)
+    const month = MONTHS[date.getMonth()]
+    const day = date.getDate()
+    return `${month} ${day}`
   } catch {
     return d
   }

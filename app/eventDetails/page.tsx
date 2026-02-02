@@ -8,14 +8,17 @@ import { events as eventsData, type Event } from "../events/data"
 
 const MAX_PER_TYPE = 6
 
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 function formatDate(d: string) {
 	try {
-		return new Date(d).toLocaleDateString(undefined, {
-			weekday: "short",
-			month: "short",
-			day: "numeric",
-			year: "numeric",
-		})
+		const date = new Date(d)
+		const weekday = DAYS[date.getDay()]
+		const month = MONTHS[date.getMonth()]
+		const day = date.getDate()
+		const year = date.getFullYear()
+		return `${weekday}, ${month} ${day}, ${year}`
 	} catch {
 		return d
 	}
