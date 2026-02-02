@@ -1,16 +1,30 @@
-# GitLab CI/CD configuration (currently disabled)
-# Uncomment the sections below to enable automatic deployment to Vercel
+# GitLab CI/CD configuration
+stages:
+  - test
+  - deploy
 
-# Placeholder to maintain valid YAML syntax
-.disabled: {}
+variables:
+  VERCEL_ORG_ID: $VERCEL_ORG_ID
+  VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
 
-# stages:
-#   - deploy
+# Build test job - runs on all branches
+build_test:
+  stage: test
+  image: node:20
+  script:
+    - npm ci --legacy-peer-deps
+    - npm run build
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+      - .next/cache/
+  artifacts:
+    paths:
+      - .next/
+    expire_in: 1 hour
 
-# variables:
-#   VERCEL_ORG_ID: $VERCEL_ORG_ID
-#   VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
-
+# Deployment jobs (commented out - uncomment to enable Vercel deployment)
 # deploy_preview:
 #   stage: deploy
 #   image: node:20
