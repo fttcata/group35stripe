@@ -1,8 +1,9 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import EventCard from '../components/EventCard'
-import { events as eventsData } from './data'
+import { events as eventsData, Event } from './data'
 
 const EventMap = dynamic(() => import('../components/EventMap'), { ssr: false })
 
@@ -11,8 +12,8 @@ function monthKey(dateStr: string) {
   return d.toLocaleString('default', { month: 'long', year: 'numeric' })
 }
 
-function groupByMonth(items: typeof eventsData) {
-  const map: Record<string, typeof eventsData> = {}
+function groupByMonth(items: Event[]) {
+  const map: Record<string, Event[]> = {}
   const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date))
   for (const ev of sorted) {
     const key = monthKey(ev.date)
@@ -23,7 +24,17 @@ function groupByMonth(items: typeof eventsData) {
 }
 
 export default function EventsPage() {
-  const grouped = groupByMonth(eventsData)
+  const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
+
+  useEffect(() => {
+    // Load submitted events from localStorage and combine with static data
+    const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]') as Event[]
+    if (submittedEvents.length > 0) {
+      setAllEvents([...eventsData, ...submittedEvents])
+    }
+  }, [])
+
+  const grouped = groupByMonth(allEvents)
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
@@ -40,7 +51,7 @@ export default function EventsPage() {
             </p>
             <div className="flex justify-center gap-4 pt-4">
               <div className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-2">
-                <span className="font-semibold">{eventsData.length}</span> Events
+                <span className="font-semibold">{allEvents.length}</span> Events
               </div>
               <div className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-2">
                 <span className="font-semibold">{Object.keys(grouped).length}</span> Months
@@ -95,7 +106,7 @@ export default function EventsPage() {
           {/* Right: Map (2/3) */}
           <aside className="md:col-span-2">
             <div className="sticky top-24">
-              <EventMap items={eventsData} />
+              <EventMap items={allEvents} />
             </div>
           </aside>
         </div>
