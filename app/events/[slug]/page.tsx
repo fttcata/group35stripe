@@ -63,6 +63,26 @@ export default function EventDetailsPage({ params }: Props) {
   const hasMinimum = totals.totalTickets >= 1
   const isValid = hasMinimum && !overMax
 
+  const handleContinue = () => {
+    if (!event || !isValid) return
+    
+    // Store cart data in localStorage
+    localStorage.setItem('cartData', JSON.stringify({
+      event: {
+        id: event.slug,
+        title: event.title,
+        date: event.date,
+      },
+      quantities,
+      paymentOption,
+      totalPrice: totals.totalPrice,
+      totalTickets: totals.totalTickets,
+    }))
+    
+    // Redirect to checkout
+    window.location.href = '/buy'
+  }
+
   if (!event) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
@@ -249,6 +269,7 @@ export default function EventDetailsPage({ params }: Props) {
               type="button"
               className="w-full rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!isValid}
+              onClick={handleContinue}
             >
               Continue
             </button>

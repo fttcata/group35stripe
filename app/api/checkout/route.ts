@@ -1,10 +1,28 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-export async function POST() {
+interface CheckoutRequest {
+  eventName?: string;
+  eventDate?: string;
+  totalPrice?: number;
+  quantity?: number;
+  eventId?: string;
+}
+
+export async function POST(req: NextRequest) {
   try {
+    const body: CheckoutRequest = await req.json().catch(() => ({}));
+    
+    // Get event details from request or use defaults
+    const eventName = body.eventName || 'Event Ticket';
+    const eventDate = body.eventDate || 'TBD';
+    const totalPrice = body.totalPrice || 1000; // in cents ($10.00 default)
+    const quantity = body.quantity || 1;
+    const eventId = body.eventId || 'unknown';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -12,20 +30,51 @@ export async function POST() {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'Ticket',
+              name: `${eventName} - Ticket`,
+              description: `Event: ${eventName} | Date: ${eventDate} | Qty: ${quantity}`,
+              metadata: {
+                eventName,
+                eventDate,
+                eventId,
+              },
             },
-            unit_amount: 1000, // $10.00
+            unit_amount: totalPrice,
           },
-          quantity: 1,
+          quantity,
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/?canceled=true`,
+      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/cancel`,
+      metadata: {
+        eventName,
+        eventDate,
+        eventId,
+        quantity: quantity.toString(),
+      },
     });
 
-    return NextResponse.json({ url: session.url });
+    // TODO: Store session ID in database
+    // await db.orders.create({
+    //   stripeSessionId: session.id,
+    //   eventId,
+    //   eventName,
+    //   eventDate,
+    //   quantity,
+    //   totalPrice,
+    //   status: 'pending',
+    //   createdAt: new Date(),
+    // });
+
+    return NextResponse.json({ 
+      url: session.url,
+      sessionId: session.id,
+    });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('Stripe checkout error:', err);
+    return NextResponse.json(
+      { error: err.message || 'Failed to create checkout session' },
+      { status: 500 }
+    );
   }
 }

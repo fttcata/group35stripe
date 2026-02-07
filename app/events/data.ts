@@ -34,6 +34,11 @@ export const events: Event[] = [
     rating: 4.8,
     lat: 53.3498,
     lng: -6.2603,
+    ticketTypes: [
+      { name: 'Standard', price: 45 },
+      { name: 'Early Bird', price: 35 },
+      { name: 'VIP', price: 75 },
+    ],
   },
   {
     slug: 'cork-half-marathon',
@@ -46,6 +51,11 @@ export const events: Event[] = [
     rating: 4.9,
     lat: 51.8985,
     lng: -8.4756,
+    ticketTypes: [
+      { name: 'Standard', price: 35 },
+      { name: 'Early Bird', price: 25 },
+      { name: 'VIP', price: 55 },
+    ],
   },
   {
     slug: 'wicklow-trail-run',
@@ -58,6 +68,11 @@ export const events: Event[] = [
     rating: 4.6,
     lat: 52.9866,
     lng: -6.0416,
+    ticketTypes: [
+      { name: 'Standard', price: 25 },
+      { name: 'Early Bird', price: 15 },
+      { name: 'VIP', price: 45 },
+    ],
   },
 ]
 
