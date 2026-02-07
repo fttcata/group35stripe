@@ -2,20 +2,13 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
 
 export default function SuccessPage() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const paymentMethod = searchParams.get('payment'); // 'check-in' or undefined (for Stripe)
   const emailParam = searchParams.get('email'); // Email for check-in payments
-  const [isLoading, setIsLoading] = useState(!!sessionId);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!sessionId) return;
-    setIsLoading(false);
-  }, [sessionId]);
+  const isLoading = !!sessionId;
 
   const isCheckInPayment = paymentMethod === 'check-in';
   const userEmail = emailParam || localStorage.getItem('checkInEmail');
@@ -57,20 +50,6 @@ export default function SuccessPage() {
                   ? 'Check your email for your receipt and confirmation details. Please bring this confirmation to the event.'
                   : 'A confirmation email has been sent to your registered email address.'}
               </p>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-6">
-              <p className="text-yellow-800 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* Loading State */}
-          {isLoading && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-6">
-              <p className="text-blue-800 text-sm">Loading order details...</p>
             </div>
           )}
 

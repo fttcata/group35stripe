@@ -17,7 +17,7 @@ export default function CancelPage() {
           <h1 className="text-3xl font-bold text-center mb-4">Payment Cancelled</h1>
 
           <p className="text-center text-gray-600 mb-8">
-            You have cancelled your payment. Your cart has been preserved, and you can proceed to checkout whenever you're ready.
+            You have cancelled your payment. Your cart has been preserved, and you can proceed to checkout whenever you&apos;re ready.
           </p>
 
           {/* Info Box */}
