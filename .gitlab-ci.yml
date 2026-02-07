@@ -1,35 +1,86 @@
-# GitLab CI/CD configuration (currently disabled)
-# Uncomment the sections below to enable automatic deployment to Vercel
+stages:
+  - lint
+  - build
+  - deploy
 
-# Placeholder to maintain valid YAML syntax
-.disabled: {}
+variables:
+  NODE_ENV: "production"
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  VERCEL_ORG_ID: $VERCEL_ORG_ID
+  VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
+image: node:20
 
-# stages:
-#   - deploy
 
-# variables:
-#   VERCEL_ORG_ID: $VERCEL_ORG_ID
-#   VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - node_modules/
+    - .npm/
 
-# deploy_preview:
-#   stage: deploy
-#   image: node:20
-#   only:
-#     - merge_requests
-#     - develop
-#   script:
-#     - npm install --global vercel
-#     - vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
-#     - vercel build --token=$VERCEL_TOKEN
-#     - vercel deploy --prebuilt --token=$VERCEL_TOKEN
+# Lint code with ESLint
+lint:
+  stage: lint
+  script:
+    - npm ci --prefer-offline --no-audit
+    - npm run lint
+  allow_failure: true
+  only:
+    - merge_requests
+    - main
+    - develop
+  tags:
+    - docker
 
-# deploy_production:
-#   stage: deploy
-#   image: node:20
-#   only:
-#     - main
-#   script:
-#     - npm install --global vercel
-#     - vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-#     - vercel build --prod --token=$VERCEL_TOKEN
-#     - vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+# Build Next.js application
+build:
+  stage: build
+  script:
+    - npm ci --prefer-offline --no-audit
+    - npm run build
+  artifacts:
+    paths:
+      - .next/
+      - out/
+      - public/
+    expire_in: 1 day
+  only:
+    - merge_requests
+    - main
+    - develop
+  tags:
+    - docker
+
+# Preview deployment on Vercel (for MRs)
+deploy_preview:
+  stage: deploy
+  environment:
+    name: preview/$CI_COMMIT_REF_SLUG
+    url: https://${CI_COMMIT_REF_SLUG}-${CI_PROJECT_NAME}.vercel.app
+  script:
+    - npm install --global vercel
+    - vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
+    - vercel build --token=$VERCEL_TOKEN
+    - vercel deploy --prebuilt --token=$VERCEL_TOKEN
+  only:
+    - merge_requests
+    - develop
+  when: manual
+  tags:
+    - docker
+
+# Production deployment to Vercel (main branch only)
+deploy_production:
+  stage: deploy
+  environment:
+    name: production
+    url: https://your-domain.vercel.app
+  script:
+    - npm install --global vercel
+    - vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+    - vercel build --prod --token=$VERCEL_TOKEN
+    - vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+  only:
+    - main
+  when: manual
+  tags:
+    - docker
