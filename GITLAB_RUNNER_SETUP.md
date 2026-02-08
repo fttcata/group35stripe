@@ -8,7 +8,7 @@ A GitLab Runner is the infrastructure component that executes CI/CD jobs defined
 - **Cost-effective** for private projects (vs. shared GitLab runners with minute limits)
 - **Customizable** - install any dependencies or tools you need
 - **Faster** - no wait time in shared runner queues
-- **Shell executor** - runs natively on Windows, no containerization overhead
+- **Docker executor** - runs jobs in isolated containers for consistent, reproducible builds
 
 ## Docker Runner (Recommended for isolation)
 
@@ -68,84 +68,14 @@ Verify runner status:
 
 Your project already has an updated `.gitlab-ci.yml` file ready to use:
 
-```yaml
-stages:
-  - lint
-  - build
-  - test
-  - deploy
+See the `.gitlab-ci.yml` file in the repository root for the full, up-to-date pipeline configuration. It includes:
 
-variables:
-  NODE_ENV: "production"
-
-cache:
-  paths:
-    - node_modules/
-
-lint:
-  stage: lint
-  script:
-    - npm install
-    - npm run lint
-  only:
-    - merge_requests
-    - main
-    - develop
-
-build:
-  stage: build
-  script:
-    - npm install
-    - npm run build
-  artifacts:
-    paths:
-      - .next/
-      - out/
-    expire_in: 1 day
-  only:
-    - merge_requests
-    - main
-    - develop
-
-# Optional: Add tests when you have them
-test:
-  stage: test
-  script:
-    - npm install
-    - npm run test  # Add test script to package.json
-  only:
-    - merge_requests
-    - main
-    - develop
-
-deploy_preview:
-  stage: deploy
-  script:
-    - npm install
-    - npx vercel --token=$VERCEL_TOKEN
-  environment:
-    name: preview
-    url: https://$CI_COMMIT_REF_SLUG.example.vercel.app
-  only:
-    - merge_requests
-  tags:
-    - windows
-    - shell
-
-deploy_production:
-  stage: deploy
-  script:
-    - npm install
-    - npx vercel --prod --token=$VERCEL_TOKEN
-  environment:
-    name: production
-    url: https://your-domain.com
-  only:
-    - main
-  tags:
-    - windows
-    - shell
-```
+- **image**: `node:20` (default Docker image for all jobs)
+- **lint**: Runs ESLint via `npm ci` + `npm run lint`
+- **build**: Compiles Next.js via `npm ci` + `npm run build`, stores `.next/` as artifact
+- **deploy_preview**: Manual Vercel preview deployment for MRs/develop
+- **deploy_production**: Manual Vercel production deployment for main
+- All jobs tagged with `docker` to run on your Docker runner
 
 ---
 

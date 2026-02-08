@@ -3,13 +3,13 @@ stages:
   - build
   - deploy
 
+image: node:20
+
 variables:
   NODE_ENV: "production"
   npm_config_cache: "$CI_PROJECT_DIR/.npm"
   VERCEL_ORG_ID: $VERCEL_ORG_ID
   VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
-image: node:20
-
 
 cache:
   key: "$CI_COMMIT_REF_SLUG"
