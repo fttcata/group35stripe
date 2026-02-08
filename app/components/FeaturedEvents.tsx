@@ -1,12 +1,37 @@
 import EventCard from './EventCard'
 import { events as eventsData } from '../events/data'
+import { supabase } from '../../lib/supabaseClient'
 
-function upcoming(limit = 3) {
-  return [...eventsData].sort((a, b) => a.date.localeCompare(b.date)).slice(0, limit)
+function upcoming(items: any[], limit = 3) {
+  return [...items].sort((a, b) => (String(a.date)).localeCompare(String(b.date))).slice(0, limit)
 }
 
-export default function FeaturedEvents() {
-  const items = upcoming(3)
+export default async function FeaturedEvents() {
+  let items = eventsData
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('id, title, description, date, venue, images')
+        .order('date', { ascending: true })
+        .limit(3)
+
+      if (!error && data) {
+        items = data.map((r: any) => ({
+          title: r.title,
+          description: r.description,
+          date: r.date ? new Date(r.date).toISOString().slice(0, 10) : '',
+          image: Array.isArray(r.images) && r.images.length > 0 ? r.images[0] : undefined,
+          location: r.venue,
+        }))
+      }
+    } catch (err) {
+      // fall back to static data
+    }
+  }
+
+  const list = upcoming(items, 3)
 
   return (
     <section className="py-12">
@@ -20,10 +45,10 @@ export default function FeaturedEvents() {
         </div>
 
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((e) => (
+          {list.map((e: any) => (
             <EventCard
               key={e.title}
-              slug={e.slug || e.title.toLowerCase().replace(/\s+/g, '-')}
+              slug={e.slug || (e.title ? e.title.toLowerCase().replace(/\s+/g, '-') : '')}
               title={e.title}
               description={e.description}
               date={e.date}
