@@ -25,13 +25,50 @@ function groupByMonth(items: Event[]) {
 
 export default function EventsPage() {
   const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Load submitted events from localStorage and combine with static data
-    const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]') as Event[]
-    if (submittedEvents.length > 0) {
+    async function fetchEvents() {
+      try {
+        const res = await fetch('/api/events')
+        if (res.ok) {
+          const json = await res.json()
+          if (json.events && json.events.length > 0) {
+            // Map Supabase rows to the Event shape used by the UI
+            const supabaseEvents: Event[] = json.events.map((ev: Record<string, unknown>) => ({
+              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
+              title: ev.title as string,
+              description: (ev.description as string) || '',
+              date: (ev.date as string).slice(0, 10), // YYYY-MM-DD
+              image: Array.isArray(ev.images) && ev.images.length > 0
+                ? ev.images[0]
+                : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
+              location: (ev.venue as string) || '',
+            }))
+
+            // Also merge any localStorage-submitted events
+            const submittedEvents = JSON.parse(
+              localStorage.getItem('submittedEvents') || '[]'
+            ) as Event[]
+
+            setAllEvents([...supabaseEvents, ...submittedEvents])
+            setLoading(false)
+            return
+          }
+        }
+      } catch {
+        // API unavailable — fall through to static data
+      }
+
+      // Fallback: use static data + localStorage
+      const submittedEvents = JSON.parse(
+        localStorage.getItem('submittedEvents') || '[]'
+      ) as Event[]
       setAllEvents([...eventsData, ...submittedEvents])
+      setLoading(false)
     }
+
+    fetchEvents()
   }, [])
 
   const grouped = groupByMonth(allEvents)
@@ -64,6 +101,11 @@ export default function EventsPage() {
       
       {/* Events + Map Section (two-column on md+) */}
       <section className="max-w-6xl mx-auto px-4 py-12">
+        {loading && (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Left: Events list (1/3) */}
           <div className="md:col-span-1 space-y-12">

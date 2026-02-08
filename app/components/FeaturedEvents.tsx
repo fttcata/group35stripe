@@ -1,12 +1,47 @@
-import EventCard from './EventCard'
-import { events as eventsData } from '../events/data'
+'use client'
 
-function upcoming(limit = 3) {
-  return [...eventsData].sort((a, b) => a.date.localeCompare(b.date)).slice(0, limit)
-}
+import { useEffect, useState } from 'react'
+import EventCard from './EventCard'
+import { events as eventsData, Event } from '../events/data'
 
 export default function FeaturedEvents() {
-  const items = upcoming(3)
+  const [items, setItems] = useState<Event[]>(
+    [...eventsData].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
+  )
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchFeatured() {
+      try {
+        const res = await fetch('/api/events')
+        if (res.ok) {
+          const json = await res.json()
+          if (json.events && json.events.length > 0) {
+            const mapped: Event[] = json.events.map((ev: Record<string, unknown>) => ({
+              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
+              title: ev.title as string,
+              description: (ev.description as string) || '',
+              date: (ev.date as string).slice(0, 10),
+              image: Array.isArray(ev.images) && ev.images.length > 0
+                ? ev.images[0]
+                : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
+              location: (ev.venue as string) || '',
+            }))
+            // Take the first 3 upcoming events
+            const upcoming = mapped
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .slice(0, 3)
+            setItems(upcoming)
+          }
+        }
+      } catch {
+        // API unavailable — keep static fallback
+      }
+      setLoading(false)
+    }
+
+    fetchFeatured()
+  }, [])
 
   return (
     <section className="py-12">
