@@ -29,11 +29,40 @@ function EventDetailsContent() {
   const slug = searchParams.get("slug")
   
   const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Load submitted events from localStorage
-    const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-    setAllEvents([...eventsData, ...submittedEvents])
+    async function fetchEvents() {
+      try {
+        const res = await fetch('/api/events')
+        if (res.ok) {
+          const json = await res.json()
+          if (json.events && json.events.length > 0) {
+            const supabaseEvents: Event[] = json.events.map((ev: Record<string, unknown>) => ({
+              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
+              title: ev.title as string,
+              description: (ev.description as string) || '',
+              date: (ev.date as string).slice(0, 10),
+              image: Array.isArray(ev.images) && ev.images.length > 0
+                ? ev.images[0]
+                : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
+              location: (ev.venue as string) || '',
+            }))
+            const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
+            setAllEvents([...supabaseEvents, ...eventsData, ...submittedEvents])
+            setLoading(false)
+            return
+          }
+        }
+      } catch {
+        // API unavailable — fall through to static data
+      }
+      // Fallback: static data + localStorage
+      const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
+      setAllEvents([...eventsData, ...submittedEvents])
+      setLoading(false)
+    }
+    fetchEvents()
   }, [])
 
   const event = allEvents.find((e) => e.slug === slug)
@@ -89,6 +118,14 @@ function EventDetailsContent() {
     // Redirect to checkout
     window.location.href = '/buy'
   }
+
+	if (loading) {
+		return (
+			<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+				<div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
+			</main>
+		)
+	}
 
 	if (!event) {
 		return (
