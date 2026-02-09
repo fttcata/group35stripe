@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type TicketType = {
   name: string
@@ -22,9 +23,9 @@ export default function SubmitEventPage() {
     sportCategory: 'Running' as typeof SPORT_CATEGORIES[number],
     location: '',
     locationUrl: '',
-    distance: '',
     image: '',
   })
+  const [imageFile, setImageFile] = useState<File | null>(null)
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([{ name: 'General', price: 0 }])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -67,6 +68,16 @@ export default function SubmitEventPage() {
         return
       }
 
+      // Validate date is in the future
+      const eventDateTime = new Date(`${formData.date}T${formData.startTime}`)
+      if (eventDateTime <= new Date()) {
+        setError('Event date must be in the future')
+        setIsSubmitting(false)
+        return
+      }
+
+      const endDateTime = new Date(`${formData.date}T${formData.endTime}`)
+
       // Validate ticket types
       const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
       if (validTickets.length === 0) {
@@ -75,34 +86,68 @@ export default function SubmitEventPage() {
         return
       }
 
-      // Generate slug from title
-      const slug = formData.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '') + '-' + Date.now()
+      // Initialize Supabase client
+      const supabase = createSupabaseBrowserClient()
 
-      // Create event object
-      const newEvent = {
-        slug,
-        title: formData.title,
-        description: formData.description,
-        date: formData.date,
-        startTime: formData.startTime,
-        endTime: formData.endTime,
-        sportCategory: formData.sportCategory,
-        location: formData.location,
-        locationUrl: formData.locationUrl || undefined,
-        distance: formData.distance || undefined,
-        image: formData.image || undefined,
-        rating: 0,
-        ticketTypes: validTickets,
+      // Upload image if provided
+      let imageUrl = ''
+      if (imageFile) {
+        const filename = `${Date.now()}-${imageFile.name}`
+        const { error: uploadError } = await supabase.storage
+          .from('event-images')
+          .upload(filename, imageFile)
+
+        if (uploadError) {
+          setError(`Failed to upload image: ${uploadError.message}`)
+          setIsSubmitting(false)
+          return
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('event-images')
+          .getPublicUrl(filename)
+
+        imageUrl = publicUrl
       }
 
-      // Get existing events from localStorage
-      const existingEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-      
-      // Add new event
-      const updatedEvents = [...existingEvents, newEvent]
-      
-      // Save to localStorage
-      localStorage.setItem('submittedEvents', JSON.stringify(updatedEvents))
+      // Insert event into Supabase
+      const { data: createdEvent, error: insertError } = await supabase
+        .from('events')
+        .insert({
+          title: formData.title,
+          description: formData.description,
+          start_date: eventDateTime.toISOString(),
+          end_time: endDateTime.toISOString(),
+          sport_category: formData.sportCategory,
+          venue: formData.location,
+          location_url: formData.locationUrl || null,
+          images: imageUrl ? [imageUrl] : [],
+        })
+        .select('id')
+        .single()
+
+      if (insertError || !createdEvent) {
+        setError(`Failed to create event: ${insertError?.message || 'Unknown error'}`)
+        setIsSubmitting(false)
+        return
+      }
+
+      // Insert ticket types linked to event
+      const ticketRows = validTickets.map((ticket) => ({
+        event_id: createdEvent.id,
+        name: ticket.name,
+        price: ticket.price,
+      }))
+
+      const { error: ticketInsertError } = await supabase
+        .from('ticket_types')
+        .insert(ticketRows)
+
+      if (ticketInsertError) {
+        setError(`Failed to save ticket types: ${ticketInsertError.message}`)
+        setIsSubmitting(false)
+        return
+      }
 
       // Clear form
       setFormData({
@@ -114,9 +159,9 @@ export default function SubmitEventPage() {
         sportCategory: 'Running',
         location: '',
         locationUrl: '',
-        distance: '',
         image: '',
       })
+      setImageFile(null)
       setTicketTypes([{ name: 'General', price: 0 }])
 
       // Redirect to events page
@@ -284,36 +329,22 @@ export default function SubmitEventPage() {
               />
             </div>
 
-            {/* Distance */}
-            <div>
-              <label htmlFor="distance" className="block text-sm font-semibold text-gray-900 mb-2">
-                Distance (optional)
-              </label>
-              <input
-                type="text"
-                id="distance"
-                name="distance"
-                value={formData.distance}
-                onChange={handleChange}
-                placeholder="e.g., 26.2 miles"
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-              />
-            </div>
 
-            {/* Image URL */}
+            {/* Image Upload */}
             <div>
               <label htmlFor="image" className="block text-sm font-semibold text-gray-900 mb-2">
-                Image URL (optional)
+                Event Image (optional)
               </label>
               <input
-                type="url"
+                type="file"
                 id="image"
-                name="image"
-                value={formData.image}
-                onChange={handleChange}
-                placeholder="https://example.com/image.jpg"
+                accept="image/*"
+                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
                 className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
               />
+              {imageFile && (
+                <p className="text-sm text-gray-600 mt-1">Selected: {imageFile.name}</p>
+              )}
             </div>
 
             {/* Ticket Types */}

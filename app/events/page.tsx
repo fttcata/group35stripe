@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import EventCard from '../components/EventCard'
-import { events as eventsData } from './data'
+import { events as eventsData, type Event, type TicketType } from './data'
 import Link from 'next/link'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 function monthKey(dateStr: string) {
   const d = new Date(dateStr)
@@ -26,9 +27,63 @@ export default function EventsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All')
 
   useEffect(() => {
-    // Load submitted events from localStorage
-    const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-    setAllEvents([...eventsData, ...submittedEvents])
+    const loadEvents = async () => {
+      const supabase = createSupabaseBrowserClient()
+
+      const { data: dbEvents, error: dbError } = await supabase
+        .from('events')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+
+      if (dbError) {
+        console.error('Failed to load events:', dbError.message)
+        setAllEvents(eventsData)
+        return
+      }
+
+      const eventIds = (dbEvents || []).map((e) => e.id)
+      let ticketRows: Array<{ event_id: number; name: string; price: number }> = []
+
+      if (eventIds.length > 0) {
+        const { data: tickets, error: ticketError } = await supabase
+          .from('ticket_types')
+          .select('event_id,name,price')
+          .in('event_id', eventIds)
+
+        if (!ticketError && tickets) {
+          ticketRows = tickets
+        }
+      }
+
+      const ticketsByEventId = ticketRows.reduce<Record<number, TicketType[]>>((acc, row) => {
+        if (!acc[row.event_id]) acc[row.event_id] = []
+        acc[row.event_id].push({ name: row.name, price: row.price })
+        return acc
+      }, {})
+
+      const mappedEvents: Event[] = (dbEvents || []).map((e) => {
+        const startDate = new Date(e.start_date)
+        const endDate = new Date(e.end_time)
+        const slugBase = e.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
+        return {
+          slug: `${slugBase}-${e.id}`,
+          title: e.title,
+          description: e.description,
+          date: startDate.toISOString().slice(0, 10),
+          startTime: startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          endTime: endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          sportCategory: e.sport_category,
+          image: e.images?.[0],
+          location: e.venue,
+          locationUrl: e.location_url || undefined,
+          rating: 0,
+          ticketTypes: ticketsByEventId[e.id] || [],
+        }
+      })
+
+      setAllEvents([...eventsData, ...mappedEvents])
+    }
+
+    loadEvents()
   }, [])
 
   // Filter events by category
