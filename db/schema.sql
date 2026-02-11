@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS events (
   description text,
   date timestamptz NOT NULL,
   venue text,
+  sport_category text,
   images text[] DEFAULT ARRAY[]::text[],
   created_at timestamptz DEFAULT now()
 );

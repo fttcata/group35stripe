@@ -34,11 +34,14 @@ export default function EventMapInner({ items, center }: Props) {
           fillOpacity: 0.9
         }).addTo(mapRef.current)
 
+        const slug = it.slug || it.title.toLowerCase().replace(/\s+/g, '-')
+
         marker.bindPopup(`
           <div style="max-width: 200px;">
             <strong>${it.title}</strong>
             <div style="font-size: 12px; color: #666;">${it.location || ''}</div>
             <div style="font-size: 11px; color: #888; margin-top: 4px;">${it.date}</div>
+            <a href="/eventDetails?slug=${encodeURIComponent(slug)}" style="display:inline-block;margin-top:8px;padding:4px 12px;background:#7c3aed;color:#fff;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View Event</a>
           </div>
         `)
       }

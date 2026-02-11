@@ -7,7 +7,7 @@ import type { Event } from '../events/data'
 const EventMapInner = dynamic(() => import('./EventMapInner'), {
   ssr: false,
   loading: () => (
-    <div className="h-72 w-full overflow-hidden rounded-xl shadow-sm bg-gray-100 flex items-center justify-center">
+    <div className="h-[576px] w-full overflow-hidden rounded-xl shadow-sm bg-gray-100 flex items-center justify-center">
       <span className="text-gray-500">Loading map...</span>
     </div>
   ),
@@ -39,7 +39,7 @@ export default function EventMap({ items }: Props) {
         <h3 className="text-lg font-semibold mb-3">Event map</h3>
         <p className="text-sm text-gray-600 mb-4">Where our featured events take place.</p>
 
-        <div className="h-72 w-full overflow-hidden rounded-xl shadow-sm" key={mapKey}>
+        <div className="h-[576px] w-full overflow-hidden rounded-xl shadow-sm" key={mapKey}>
           <EventMapInner items={items} center={center} />
         </div>
       </div>
