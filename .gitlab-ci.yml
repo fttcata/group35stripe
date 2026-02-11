@@ -1,49 +1,15 @@
 # GitLab CI/CD configuration
 stages:
   - test
-  - deploy
-
-variables:
-  VERCEL_ORG_ID: $VERCEL_ORG_ID
-  VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
 
 # Build test job - runs on all branches
 build_test:
   stage: test
-  image: node:20
   script:
     - npm ci --legacy-peer-deps
-    - npm run build
+    - STRIPE_SECRET_KEY=sk_test_placeholder NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder npm run build
   cache:
-    key: ${CI_COMMIT_REF_SLUG}
+    key: ${CI_COMMIT_REF_SLUG}-protected
     paths:
       - node_modules/
       - .next/cache/
-  artifacts:
-    paths:
-      - .next/
-    expire_in: 1 hour
-
-# Deployment jobs (commented out - uncomment to enable Vercel deployment)
-# deploy_preview:
-#   stage: deploy
-#   image: node:20
-#   only:
-#     - merge_requests
-#     - develop
-#   script:
-#     - npm install --global vercel
-#     - vercel pull --yes --environment=preview --token=$VERCEL_TOKEN
-#     - vercel build --token=$VERCEL_TOKEN
-#     - vercel deploy --prebuilt --token=$VERCEL_TOKEN
-
-# deploy_production:
-#   stage: deploy
-#   image: node:20
-#   only:
-#     - main
-#   script:
-#     - npm install --global vercel
-#     - vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-#     - vercel build --prod --token=$VERCEL_TOKEN
-#     - vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
