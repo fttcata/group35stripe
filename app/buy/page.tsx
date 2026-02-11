@@ -11,11 +11,65 @@ interface CartData {
   totalTickets: number;
 }
 
+interface GuestInfo {
+  name: string;
+  email: string;
+  phone: string;
+}
+
+interface FormErrors {
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+// Email validation regex (RFC 5322 simplified)
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
+// Phone validation regex (allows various formats)
+const PHONE_REGEX = /^[\d\s\-+()]{7,20}$/;
+
+function validateEmail(email: string): string | undefined {
+  if (!email.trim()) {
+    return 'Email is required';
+  }
+  if (!EMAIL_REGEX.test(email.trim())) {
+    return 'Please enter a valid email address';
+  }
+  return undefined;
+}
+
+function validateName(name: string): string | undefined {
+  if (!name.trim()) {
+    return 'Name is required';
+  }
+  if (name.trim().length < 2) {
+    return 'Name must be at least 2 characters';
+  }
+  return undefined;
+}
+
+function validatePhone(phone: string): string | undefined {
+  // Phone is optional, but if provided, must be valid
+  if (phone.trim() && !PHONE_REGEX.test(phone.trim())) {
+    return 'Please enter a valid phone number';
+  }
+  return undefined;
+}
+
 export default function BuyPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cartData, setCartData] = useState<CartData | null>(null);
-  const [email, setEmail] = useState('');
+  
+  // Guest checkout form state
+  const [guestInfo, setGuestInfo] = useState<GuestInfo>({
+    name: '',
+    email: '',
+    phone: '',
+  });
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     // Load cart data from localStorage
@@ -24,6 +78,50 @@ export default function BuyPage() {
       setCartData(JSON.parse(saved));
     }
   }, []);
+
+  // Validate form on input change
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+    
+    const nameError = validateName(guestInfo.name);
+    if (nameError) errors.name = nameError;
+    
+    const emailError = validateEmail(guestInfo.email);
+    if (emailError) errors.email = emailError;
+    
+    const phoneError = validatePhone(guestInfo.phone);
+    if (phoneError) errors.phone = phoneError;
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleInputChange = (field: keyof GuestInfo) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setGuestInfo(prev => ({ ...prev, [field]: value }));
+    
+    // Clear error when user starts typing
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const handleBlur = (field: keyof GuestInfo) => () => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    
+    // Validate field on blur
+    let error: string | undefined;
+    if (field === 'name') error = validateName(guestInfo.name);
+    if (field === 'email') error = validateEmail(guestInfo.email);
+    if (field === 'phone') error = validatePhone(guestInfo.phone);
+    
+    setFormErrors(prev => ({ ...prev, [field]: error }));
+  };
+
+  // Format email to lowercase and trim
+  const formatEmail = (email: string): string => {
+    return email.trim().toLowerCase();
+  };
 
   // Ticket details - from cart or defaults
   const ticketDetails = cartData ? {
@@ -41,23 +139,28 @@ export default function BuyPage() {
   };
 
   const handleCheckout = async () => {
+    // Validate guest form first
+    if (!validateForm()) {
+      setError('Please fill in all required fields correctly');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
+
+    const formattedEmail = formatEmail(guestInfo.email);
 
     try {
       // If paying at check-in, skip Stripe and go directly to success page
       if (cartData?.paymentOption === 'pay-on-day') {
-        // Validate email for check-in payment
-        if (!email || !email.includes('@')) {
-          setError('Please enter a valid email address');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Store email and redirect to success page
-        localStorage.setItem('checkInEmail', email);
+        // Store guest info and redirect to success page
+        localStorage.setItem('guestCheckoutInfo', JSON.stringify({
+          name: guestInfo.name.trim(),
+          email: formattedEmail,
+          phone: guestInfo.phone.trim(),
+        }));
         localStorage.removeItem('cartData');
-        window.location.href = `/success?payment=check-in&email=${encodeURIComponent(email)}`;
+        window.location.href = `/success?payment=check-in&email=${encodeURIComponent(formattedEmail)}&guest=true`;
         return;
       }
 
@@ -73,6 +176,11 @@ export default function BuyPage() {
           eventId: ticketDetails.eventId,
           totalPrice: Math.round(ticketDetails.totalPrice * 100), // Convert to cents
           quantity: ticketDetails.quantity,
+          // Guest checkout info
+          isGuest: true,
+          guestName: guestInfo.name.trim(),
+          guestEmail: formattedEmail,
+          guestPhone: guestInfo.phone.trim() || undefined,
         }),
       });
 
@@ -83,6 +191,12 @@ export default function BuyPage() {
       }
 
       if (data.url) {
+        // Store guest info for success page
+        localStorage.setItem('guestCheckoutInfo', JSON.stringify({
+          name: guestInfo.name.trim(),
+          email: formattedEmail,
+          phone: guestInfo.phone.trim(),
+        }));
         // Redirect to Stripe hosted checkout page
         window.location.assign(data.url);
       }
@@ -129,22 +243,92 @@ export default function BuyPage() {
             </div>
           )}
 
-          {/* Email Input for Check-in Payment */}
-          {cartData?.paymentOption === 'pay-on-day' && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          {/* Guest Checkout Form */}
+          <div className="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Guest Checkout
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              No account needed! Just provide your details below to complete your purchase.
+            </p>
+            
+            {/* Name Field */}
+            <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
+                Full Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={guestInfo.name}
+                onChange={handleInputChange('name')}
+                onBlur={handleBlur('name')}
+                placeholder="John Doe"
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.name && formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
+                required
+              />
+              {touched.name && formErrors.name && (
+                <p className="text-red-600 text-xs mt-1">{formErrors.name}</p>
+              )}
+            </div>
+            
+            {/* Email Field */}
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Email Address <span className="text-red-500">*</span>
               </label>
               <input
                 type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={guestInfo.email}
+                onChange={handleInputChange('email')}
+                onBlur={handleBlur('email')}
                 placeholder="your@email.com"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.email && formErrors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
                 required
               />
-              <p className="text-xs text-gray-600 mt-2">
-                We'll send your confirmation and receipt to this email. Bring it to check-in.
+              {touched.email && formErrors.email && (
+                <p className="text-red-600 text-xs mt-1">{formErrors.email}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                We'll send your ticket confirmation to this email.
+              </p>
+            </div>
+            
+            {/* Phone Field (Optional) */}
+            <div className="mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Phone Number <span className="text-gray-400">(optional)</span>
+              </label>
+              <input
+                type="tel"
+                value={guestInfo.phone}
+                onChange={handleInputChange('phone')}
+                onBlur={handleBlur('phone')}
+                placeholder="+1 (555) 123-4567"
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.phone && formErrors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
+              />
+              {touched.phone && formErrors.phone && (
+                <p className="text-red-600 text-xs mt-1">{formErrors.phone}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                For event updates and check-in assistance.
+              </p>
+            </div>
+          </div>
+
+          {/* Pay at Check-in Notice */}
+          {cartData?.paymentOption === 'pay-on-day' && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800 font-medium">
+                💳 Pay at Check-in Selected
+              </p>
+              <p className="text-xs text-yellow-700 mt-1">
+                You'll receive a confirmation email with your ticket. Payment will be collected when you arrive at the event.
               </p>
             </div>
           )}

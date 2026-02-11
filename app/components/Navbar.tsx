@@ -14,6 +14,12 @@ export default function Navbar() {
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
 
+    // Skip auth if Supabase is not configured
+    if (!supabase) {
+      setLoading(false)
+      return
+    }
+
     // Get initial session
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user)
@@ -32,6 +38,7 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     const supabase = createSupabaseBrowserClient()
+    if (!supabase) return
     await supabase.auth.signOut()
     setUser(null)
     setMenuOpen(false)

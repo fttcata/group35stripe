@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS orders (
   event_id uuid REFERENCES events(id),
   total_amount numeric(10,2) NOT NULL,
   payment_status text NOT NULL DEFAULT 'pending',
+  stripe_session_id text,
+  is_guest boolean DEFAULT false,
+  guest_name text,
+  guest_email text,
+  guest_phone text,
   created_at timestamptz DEFAULT now()
 );
 
