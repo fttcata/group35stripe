@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('path')
 const fs = require('fs')
 
@@ -50,7 +50,7 @@ async function runSchemaIfNeeded() {
 async function ensureTables() {
   try {
     // simple check whether events table exists
-    const { data, error } = await supabase.from('events').select('id').limit(1)
+    const { error } = await supabase.from('events').select('id').limit(1)
     if (error) {
       console.error('Could not access `events` table. Please run the SQL in db/schema.sql in your Supabase SQL editor first.')
       console.error('Full error:', error.message || error)

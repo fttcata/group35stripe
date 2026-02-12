@@ -77,6 +77,7 @@ function EventDetailsContent() {
       event.ticketTypes.forEach((_, index) => {
         initial[index.toString()] = 0
       })
+			// eslint-disable-next-line react-hooks/set-state-in-effect
       setQuantities(initial)
     }
   }, [event])
