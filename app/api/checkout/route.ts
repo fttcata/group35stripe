@@ -1,7 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripeClient() {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('Stripe secret key is not configured');
+  }
+  return new Stripe(secretKey);
+}
 
 interface CheckoutRequest {
   eventName?: string;
@@ -23,6 +29,7 @@ export async function POST(req: NextRequest) {
     const eventId = body.eventId || 'unknown';
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
+    const stripe = getStripeClient();
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -70,10 +77,11 @@ export async function POST(req: NextRequest) {
       url: session.url,
       sessionId: session.id,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Stripe checkout error:', err);
+    const message = err instanceof Error ? err.message : 'Failed to create checkout session';
     return NextResponse.json(
-      { error: err.message || 'Failed to create checkout session' },
+      { error: message },
       { status: 500 }
     );
   }

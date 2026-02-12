@@ -144,7 +144,7 @@ export default function BuyPage() {
                 required
               />
               <p className="text-xs text-gray-600 mt-2">
-                We'll send your confirmation and receipt to this email. Bring it to check-in.
+                We&apos;ll send your confirmation and receipt to this email. Bring it to check-in.
               </p>
             </div>
           )}

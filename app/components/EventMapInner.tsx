@@ -13,26 +13,48 @@ type Props = {
 export default function EventMapInner({ items, center }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const markersRef = useRef<L.LayerGroup | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
+    if (!containerRef.current) return
 
-    // Initialize map
-    mapRef.current = L.map(containerRef.current).setView(center, 8)
+    if (!mapRef.current) {
+      // Initialize map
+      mapRef.current = L.map(containerRef.current).setView(center, 8)
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(mapRef.current)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(mapRef.current)
 
-    // Add markers
+      markersRef.current = L.layerGroup().addTo(mapRef.current)
+    } else {
+      mapRef.current.setView(center, mapRef.current.getZoom())
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove()
+        mapRef.current = null
+        markersRef.current = null
+      }
+    }
+  }, [center])
+
+  useEffect(() => {
+    if (!mapRef.current || !markersRef.current) return
+
+    const markers = markersRef.current
+    markers.clearLayers()
+
     items.forEach((it) => {
-      if (it.lat !== undefined && it.lng !== undefined && mapRef.current) {
+      if (it.lat !== undefined && it.lng !== undefined) {
         const marker = L.circleMarker([it.lat, it.lng], {
           radius: 8,
           color: '#7c3aed',
           fillColor: '#7c3aed',
           fillOpacity: 0.9
-        }).addTo(mapRef.current)
+        }).addTo(markers)
 
         marker.bindPopup(`
           <div style="max-width: 200px;">
@@ -43,15 +65,7 @@ export default function EventMapInner({ items, center }: Props) {
         `)
       }
     })
-
-    // Cleanup on unmount
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove()
-        mapRef.current = null
-      }
-    }
-  }, []) // Empty deps - only run once
+  }, [items])
 
   return <div ref={containerRef} className="h-full w-full" />
 }

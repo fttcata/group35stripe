@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import EventCard from './EventCard'
 import { events as eventsData, Event } from '../events/data'
@@ -8,7 +9,6 @@ export default function FeaturedEvents() {
   const [items, setItems] = useState<Event[]>(
     [...eventsData].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
   )
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchFeatured() {
@@ -37,7 +37,6 @@ export default function FeaturedEvents() {
       } catch {
         // API unavailable — keep static fallback
       }
-      setLoading(false)
     }
 
     fetchFeatured()
@@ -51,7 +50,7 @@ export default function FeaturedEvents() {
             <h2 className="text-2xl font-bold">Featured Events</h2>
             <p className="text-sm text-gray-600">Hand-picked upcoming events you might like.</p>
           </div>
-          <a href="/events" className="text-sm font-medium text-indigo-600 hover:underline">See all</a>
+          <Link href="/events" className="text-sm font-medium text-indigo-600 hover:underline">See all</Link>
         </div>
 
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
