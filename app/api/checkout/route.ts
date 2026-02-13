@@ -1,7 +1,9 @@
 import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
+import { supabase } from '../../../lib/supabaseClient';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface CheckoutRequest {
   eventName?: string;
@@ -9,6 +11,8 @@ interface CheckoutRequest {
   totalPrice?: number;
   quantity?: number;
   eventId?: string;
+  paymentMethod?: 'stripe' | 'pay-on-day';
+  customerEmail?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -21,10 +25,14 @@ export async function POST(req: NextRequest) {
     const totalPrice = body.totalPrice || 1000; // in cents ($10.00 default)
     const quantity = body.quantity || 1;
     const eventId = body.eventId || 'unknown';
+    const eventIdForDb = UUID_REGEX.test(eventId) ? eventId : null;
+    const paymentMethod = body.paymentMethod || 'stripe';
+    const customerEmail = body.customerEmail;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
+      customer_email: customerEmail,
       line_items: [
         {
           price_data: {
@@ -32,11 +40,6 @@ export async function POST(req: NextRequest) {
             product_data: {
               name: `${eventName} - Ticket`,
               description: `Event: ${eventName} | Date: ${eventDate} | Qty: ${quantity}`,
-              metadata: {
-                eventName,
-                eventDate,
-                eventId,
-              },
             },
             unit_amount: totalPrice,
           },
@@ -51,20 +54,30 @@ export async function POST(req: NextRequest) {
         eventDate,
         eventId,
         quantity: quantity.toString(),
+        paymentMethod,
       },
     });
 
-    // TODO: Store session ID in database
-    // await db.orders.create({
-    //   stripeSessionId: session.id,
-    //   eventId,
-    //   eventName,
-    //   eventDate,
-    //   quantity,
-    //   totalPrice,
-    //   status: 'pending',
-    //   createdAt: new Date(),
-    // });
+    // Store pending order in database with session ID
+    if (supabase) {
+      const { error } = await supabase
+        .from('orders')
+        .insert([
+          {
+            stripe_session_id: session.id,
+            event_id: eventIdForDb,
+            customer_email: customerEmail || null,
+            payment_method: paymentMethod,
+            total_amount: totalPrice / 100,
+            payment_status: 'pending',
+          },
+        ]);
+
+      if (error) {
+        console.warn('Failed to create pending order:', error);
+        // Don't fail the checkout if we can't store the order - Stripe webhook will handle it
+      }
+    }
 
     return NextResponse.json({ 
       url: session.url,

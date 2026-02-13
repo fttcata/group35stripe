@@ -45,19 +45,37 @@ export default function BuyPage() {
     setError(null);
 
     try {
+      // Require an email for both payment flows
+      if (!email || !email.includes('@')) {
+        setError('Please enter a valid email address');
+        setIsLoading(false);
+        return;
+      }
+
       // If paying at check-in, skip Stripe and go directly to success page
       if (cartData?.paymentOption === 'pay-on-day') {
-        // Validate email for check-in payment
-        if (!email || !email.includes('@')) {
-          setError('Please enter a valid email address');
-          setIsLoading(false);
-          return;
+        const checkInResponse = await fetch('/api/checkin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            eventTitle: ticketDetails.eventName,
+            eventDate: ticketDetails.eventDate,
+            amount: ticketDetails.totalPrice,
+          }),
+        });
+
+        const checkInData = await checkInResponse.json();
+        if (!checkInResponse.ok || checkInData.error) {
+          throw new Error(checkInData.error || 'Failed to send confirmation email');
         }
-        
+
         // Store email and redirect to success page
         localStorage.setItem('checkInEmail', email);
         localStorage.removeItem('cartData');
-        window.location.href = `/success?payment=check-in&email=${encodeURIComponent(email)}`;
+        window.location.href = `/success?payment=check-in&email=${encodeURIComponent(email)}&order_id=${encodeURIComponent(checkInData.orderId || '')}`;
         return;
       }
 
@@ -73,6 +91,7 @@ export default function BuyPage() {
           eventId: ticketDetails.eventId,
           totalPrice: Math.round(ticketDetails.totalPrice * 100), // Convert to cents
           quantity: ticketDetails.quantity,
+          customerEmail: email,
         }),
       });
 
@@ -129,25 +148,25 @@ export default function BuyPage() {
             </div>
           )}
 
-          {/* Email Input for Check-in Payment */}
-          {cartData?.paymentOption === 'pay-on-day' && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              <p className="text-xs text-gray-600 mt-2">
-                We'll send your confirmation and receipt to this email. Bring it to check-in.
-              </p>
-            </div>
-          )}
+          {/* Email Input */}
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+            <p className="text-xs text-gray-600 mt-2">
+              {cartData?.paymentOption === 'pay-on-day'
+                ? "We'll send your confirmation and receipt to this email. Bring it to check-in."
+                : "We'll send your ticket confirmation to this email after payment."}
+            </p>
+          </div>
 
           {/* Checkout Button */}
           <button
