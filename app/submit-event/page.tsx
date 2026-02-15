@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import PublishConfirmationModal from '../components/PublishConfirmationModal'
 
 type TicketType = {
   name: string
@@ -29,6 +30,9 @@ export default function SubmitEventPage() {
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([{ name: 'General', price: 0 }])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [showPublishModal, setShowPublishModal] = useState(false)
+  const [pendingPublish, setPendingPublish] = useState(false)
+  const [publishSuccess, setPublishSuccess] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -55,36 +59,53 @@ export default function SubmitEventPage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const validateRequiredFields = (): boolean => {
+    if (!formData.title || !formData.description || !formData.date || !formData.location || !formData.startTime || !formData.endTime) {
+      setError('Please fill in all required fields')
+      return false
+    }
+
+    // Validate date is in the future
+    const eventDateTime = new Date(`${formData.date}T${formData.startTime}`)
+    if (eventDateTime <= new Date()) {
+      setError('Event date must be in the future')
+      return false
+    }
+
+    return true
+  }
+
+  const validateTicketTypes = (): boolean => {
+    const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
+    if (validTickets.length === 0) {
+      setError('Please add at least one valid ticket type with a price')
+      return false
+    }
+    return true
+  }
+
+  const handleSubmit = async (e?: React.FormEvent | null, publish: boolean = false) => {
+    if (e && e.preventDefault) {
+      e.preventDefault()
+    }
     setError('')
     setIsSubmitting(true)
 
     try {
       // Validate form
-      if (!formData.title || !formData.description || !formData.date || !formData.location || !formData.startTime || !formData.endTime) {
-        setError('Please fill in all required fields')
+      if (!validateRequiredFields()) {
         setIsSubmitting(false)
         return
       }
 
-      // Validate date is in the future
+      // If publishing, validate ticket types
+      if (publish && !validateTicketTypes()) {
+        setIsSubmitting(false)
+        return
+      }
+
       const eventDateTime = new Date(`${formData.date}T${formData.startTime}`)
-      if (eventDateTime <= new Date()) {
-        setError('Event date must be in the future')
-        setIsSubmitting(false)
-        return
-      }
-
       const endDateTime = new Date(`${formData.date}T${formData.endTime}`)
-
-      // Validate ticket types
-      const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
-      if (validTickets.length === 0) {
-        setError('Please add at least one valid ticket type with a price')
-        setIsSubmitting(false)
-        return
-      }
 
       // Initialize Supabase client
       const supabase = createSupabaseBrowserClient()
@@ -122,6 +143,7 @@ export default function SubmitEventPage() {
           venue: formData.location,
           location_url: formData.locationUrl || null,
           images: imageUrl ? [imageUrl] : [],
+          status: publish ? 'published' : 'draft',
         })
         .select('id')
         .single()
@@ -133,6 +155,7 @@ export default function SubmitEventPage() {
       }
 
       // Insert ticket types linked to event
+      const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
       const ticketRows = validTickets.map((ticket) => ({
         event_id: createdEvent.id,
         name: ticket.name,
@@ -164,8 +187,12 @@ export default function SubmitEventPage() {
       setImageFile(null)
       setTicketTypes([{ name: 'General', price: 0 }])
 
-      // Redirect to events page
-      router.push('/events')
+      // Redirect based on publish status
+      if (publish) {
+        setPublishSuccess(true)
+      } else {
+        router.push('/drafts')
+      }
     } catch (err) {
       setError('Failed to submit event. Please try again.')
       console.error(err)
@@ -174,18 +201,62 @@ export default function SubmitEventPage() {
     }
   }
 
+  const handlePublishConfirm = async () => {
+    await handleSubmit({} as React.FormEvent, true)
+    setShowPublishModal(false)
+    setPendingPublish(false)
+  }
+
+  if (isSubmitting) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+        <div className="text-gray-600">Submitting...</div>
+      </main>
+    )
+  }
+
+  if (publishSuccess) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center space-y-6">
+          <div className="text-6xl">✅</div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold text-green-600">Event Published!</h1>
+            <p className="text-gray-600">Your event has been successfully published and is now live.</p>
+          </div>
+          <button
+            onClick={() => router.push('/events')}
+            className="w-full rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700"
+          >
+            View All Events
+          </button>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
       <div className="max-w-2xl mx-auto px-4 py-10">
-        <Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">
-          ← Back to Events
-        </Link>
+        <div className="flex justify-between items-center mb-6">
+          <Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">
+            ← Back to Events
+          </Link>
+          <div className="flex gap-4">
+            <Link href="/my-events" className="text-sm text-purple-700 hover:text-purple-900 font-semibold">
+              My Events
+            </Link>
+            <Link href="/drafts" className="text-sm text-purple-700 hover:text-purple-900 font-semibold">
+              Drafts
+            </Link>
+          </div>
+        </div>
 
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Submit New Event</h1>
           <p className="text-gray-600 mb-6">Create and share your event with the community</p>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form className="space-y-6">
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 p-4">
                 <p className="text-red-800">{error}</p>
@@ -392,14 +463,29 @@ export default function SubmitEventPage() {
               </button>
             </div>
 
-            {/* Submit Button */}
+            {/* Submit Buttons */}
             <div className="flex gap-3 pt-4">
               <button
-                type="submit"
+                type="button"
+                onClick={(e) => handleSubmit(e as React.FormEvent, false)}
+                disabled={isSubmitting}
+                className="flex-1 rounded-full bg-gray-200 text-gray-900 py-3 font-semibold hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Saving...' : 'Save as Draft'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Validate before showing modal
+                  if (!validateRequiredFields()) return
+                  if (!validateTicketTypes()) return
+                  setPendingPublish(true)
+                  setShowPublishModal(true)
+                }}
                 disabled={isSubmitting}
                 className="flex-1 rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Submitting...' : 'Submit Event'}
+                {isSubmitting ? 'Publishing...' : 'Publish Event'}
               </button>
               <Link
                 href="/events"
@@ -411,6 +497,22 @@ export default function SubmitEventPage() {
           </form>
         </div>
       </div>
+
+      {showPublishModal && pendingPublish && (
+        <PublishConfirmationModal
+          event={{
+            id: 0,
+            title: formData.title,
+            description: formData.description,
+            start_date: `${formData.date}T${formData.startTime}`,
+          }}
+          onConfirm={handlePublishConfirm}
+          onCancel={() => {
+            setShowPublishModal(false)
+            setPendingPublish(false)
+          }}
+        />
+      )}
     </main>
   )
 }

@@ -33,6 +33,7 @@ export default function EventsPage() {
       const { data: dbEvents, error: dbError } = await supabase
         .from('events')
         .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+        .eq('status', 'published')
 
       if (dbError) {
         console.error('Failed to load events:', dbError.message)
@@ -98,6 +99,30 @@ export default function EventsPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+      {/* Top Navigation */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
+          <Link
+            href="/my-events"
+            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+          >
+            My Events
+          </Link>
+          <Link
+            href="/drafts"
+            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+          >
+            Drafts
+          </Link>
+          <Link
+            href="/submit-event"
+            className="text-sm bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-purple-700"
+          >
+            + Create Event
+          </Link>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-700 text-white">
         <div className="absolute inset-0 bg-black/10"></div>
