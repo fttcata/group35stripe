@@ -151,16 +151,42 @@ export default function BuyPage() {
     const formattedEmail = formatEmail(guestInfo.email);
 
     try {
+      // Require an email for both payment flows
+      if (!formattedEmail || !formattedEmail.includes('@')) {
+        setError('Please enter a valid email address');
+        setIsLoading(false);
+        return;
+      }
+
       // If paying at check-in, skip Stripe and go directly to success page
       if (cartData?.paymentOption === 'pay-on-day') {
-        // Store guest info and redirect to success page
+        // Store guest info and send confirmation email
         localStorage.setItem('guestCheckoutInfo', JSON.stringify({
           name: guestInfo.name.trim(),
           email: formattedEmail,
           phone: guestInfo.phone.trim(),
         }));
+
+        const checkInResponse = await fetch('/api/checkin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: formattedEmail,
+            eventTitle: ticketDetails.eventName,
+            eventDate: ticketDetails.eventDate,
+            amount: ticketDetails.totalPrice,
+          }),
+        });
+
+        const checkInData = await checkInResponse.json();
+        if (!checkInResponse.ok || checkInData.error) {
+          throw new Error(checkInData.error || 'Failed to send confirmation email');
+        }
+
         localStorage.removeItem('cartData');
-        window.location.href = `/success?payment=check-in&email=${encodeURIComponent(formattedEmail)}&guest=true`;
+        window.location.href = `/success?payment=check-in&email=${encodeURIComponent(formattedEmail)}&guest=true&order_id=${encodeURIComponent(checkInData.orderId || '')}`;
         return;
       }
 
@@ -181,6 +207,7 @@ export default function BuyPage() {
           guestName: guestInfo.name.trim(),
           guestEmail: formattedEmail,
           guestPhone: guestInfo.phone.trim() || undefined,
+          customerEmail: formattedEmail,
         }),
       });
 

@@ -1,16 +1,32 @@
 'use client';
 
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 export default function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
+  const orderIdParam = searchParams.get('order_id');
   const paymentMethod = searchParams.get('payment'); // 'check-in' or undefined (for Stripe)
   const emailParam = searchParams.get('email'); // Email for check-in payments
   const isLoading = !!sessionId;
+  const [storedEmail, setStoredEmail] = useState<string | null>(null);
 
   const isCheckInPayment = paymentMethod === 'check-in';
-  const userEmail = emailParam || localStorage.getItem('checkInEmail');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      setStoredEmail(window.localStorage.getItem('checkInEmail'));
+    } catch {
+      setStoredEmail(null);
+    }
+  }, []);
+
+  const userEmail = emailParam || storedEmail;
 
   return (
     <>
@@ -28,7 +44,7 @@ export default function SuccessContent() {
       {!isLoading && (
         <div className={`border rounded-lg p-6 mb-6 ${isCheckInPayment ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
           <p className="text-sm text-gray-600 mb-2">{isCheckInPayment ? 'Confirmation' : 'Order Confirmation'}</p>
-          <p className="font-mono text-sm text-gray-900 break-all mb-4">{sessionId || new Date().toISOString()}</p>
+          <p className="font-mono text-sm text-gray-900 break-all mb-4">{sessionId || orderIdParam || new Date().toISOString()}</p>
           {isCheckInPayment && userEmail && (
             <div className="bg-white rounded p-3 mb-3 border border-blue-100">
               <p className="text-xs text-gray-600 mb-1">Confirmation sent to:</p>

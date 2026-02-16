@@ -8,10 +8,10 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('events')
-      .select('id, title, description, date, venue, sport_category, images')
-      .order('date', { ascending: true })
+      .select('*')\n      .order('date', { ascending: true })
 
     if (error) {
+      console.error('Failed to fetch events:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 

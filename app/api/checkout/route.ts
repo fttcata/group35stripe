@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { supabase } from '../../../lib/supabaseClient';
 
 // Check if Stripe is configured
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -10,6 +10,8 @@ if (!process.env.STRIPE_SECRET_KEY) {
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface CheckoutRequest {
   eventName?: string;
@@ -22,6 +24,8 @@ interface CheckoutRequest {
   guestName?: string;
   guestEmail?: string;
   guestPhone?: string;
+  paymentMethod?: 'stripe' | 'pay-on-day';
+  customerEmail?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -42,6 +46,9 @@ export async function POST(req: NextRequest) {
     const totalPrice = body.totalPrice || 1000; // in cents ($10.00 default)
     const quantity = body.quantity || 1;
     const eventId = body.eventId || 'unknown';
+    const eventIdForDb = UUID_REGEX.test(eventId) ? eventId : null;
+    const paymentMethod = body.paymentMethod || 'stripe';
+    const customerEmail = body.customerEmail;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
     // Guest checkout info
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      customer_email: guestEmail || undefined, // Pre-fill email in Stripe checkout
+      customer_email: guestEmail || customerEmail || undefined,
       line_items: [
         {
           price_data: {
@@ -70,11 +77,6 @@ export async function POST(req: NextRequest) {
             product_data: {
               name: `${eventName} - Ticket${quantity > 1 ? 's' : ''}`,
               description: `Event: ${eventName} | Date: ${eventDate} | Qty: ${quantity}`,
-              metadata: {
-                eventName,
-                eventDate,
-                eventId,
-              },
             },
             // totalPrice is already the total amount, so use quantity=1
             unit_amount: totalPrice,
@@ -94,31 +96,33 @@ export async function POST(req: NextRequest) {
         guestName,
         guestEmail,
         guestPhone: guestPhone || '',
+        paymentMethod,
       },
     });
 
-    // Store order in database with guest flag (only if Supabase is configured)
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      try {
-        const supabase = await createSupabaseServerClient();
-        
-        await supabase.from('orders').insert({
-          event_id: eventId !== 'unknown' ? eventId : null,
-          total_amount: totalPrice / 100, // Convert cents to dollars
-          payment_status: 'pending',
-          stripe_session_id: session.id,
-          is_guest: isGuest,
-          guest_name: guestName || null,
-          guest_email: guestEmail || null,
-          guest_phone: guestPhone,
-          user_id: null, // Guest checkout has no user
-        });
-      } catch (dbError) {
-        // Log but don't fail - order can be created via webhook
-        console.warn('Failed to store order in database:', dbError);
+    // Store pending order in database with session ID
+    if (supabase) {
+      const { error } = await supabase
+        .from('orders')
+        .insert([
+          {
+            stripe_session_id: session.id,
+            event_id: eventIdForDb,
+            customer_email: guestEmail || customerEmail || null,
+            payment_method: paymentMethod,
+            total_amount: totalPrice / 100,
+            payment_status: 'pending',
+            is_guest: isGuest,
+            guest_name: guestName || null,
+            guest_email: guestEmail || null,
+            guest_phone: guestPhone,
+          },
+        ]);
+
+      if (error) {
+        console.warn('Failed to create pending order:', error);
+        // Don't fail the checkout if we can't store the order - Stripe webhook will handle it
       }
-    } else {
-      console.log('Supabase not configured - skipping database insert (local testing mode)');
     }
 
     return NextResponse.json({ 

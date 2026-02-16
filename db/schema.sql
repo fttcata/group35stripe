@@ -29,11 +29,7 @@ CREATE TABLE IF NOT EXISTS orders (
   event_id uuid REFERENCES events(id),
   total_amount numeric(10,2) NOT NULL,
   payment_status text NOT NULL DEFAULT 'pending',
-  stripe_session_id text,
-  is_guest boolean DEFAULT false,
-  guest_name text,
-  guest_email text,
-  guest_phone text,
+  stripe_session_id text UNIQUE,\n  is_guest boolean DEFAULT false,\n  guest_name text,\n  guest_email text,\n  guest_phone text,\n  customer_email text,\n  payment_method text DEFAULT 'stripe',
   created_at timestamptz DEFAULT now()
 );
 
@@ -42,5 +38,16 @@ CREATE TABLE IF NOT EXISTS order_items (
   order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
   ticket_type_id uuid REFERENCES ticket_types(id),
   quantity integer NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
+  ticket_code text UNIQUE NOT NULL,
+  qr_code_data text NOT NULL,
+  ticket_type text NOT NULL,
+  is_used boolean DEFAULT false,
+  used_at timestamptz,
   created_at timestamptz DEFAULT now()
 );

@@ -17,15 +17,18 @@
     "dotenv": "^17.2.3",
     "leaflet": "^1.9.4",
     "next": "16.1.4",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-leaflet": "^4.2.1",
+    "resend": "^6.9.2",
     "stripe": "^20.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.17",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
