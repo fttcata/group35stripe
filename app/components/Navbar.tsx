@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import type { User } from '@supabase/supabase-js'
+import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 export default function Navbar() {
   const [user, setUser] = useState<User | null>(null)
@@ -14,16 +14,24 @@ export default function Navbar() {
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
 
-    // Get initial session
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user)
+    // Skip auth if Supabase is not configured
+    if (!supabase) {
       setLoading(false)
-    })
+      return
+    }
+
+    // Get initial session
+    const getInitialUser = async () => {
+      const { data } = await supabase.auth.getUser()
+      setUser(data.user)
+      setLoading(false)
+    }
+    getInitialUser()
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setUser(session?.user ?? null)
     })
 
@@ -32,6 +40,7 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     const supabase = createSupabaseBrowserClient()
+    if (!supabase) return
     await supabase.auth.signOut()
     setUser(null)
     setMenuOpen(false)

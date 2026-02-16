@@ -20,6 +20,11 @@ function LoginForm() {
     setLoading(true)
 
     const supabase = createSupabaseBrowserClient()
+    if (!supabase) {
+      setError('Authentication is not configured. Please set up Supabase credentials.')
+      setLoading(false)
+      return
+    }
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
