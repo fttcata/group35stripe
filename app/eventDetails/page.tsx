@@ -4,7 +4,8 @@ import Image from "next/image"
 import Link from "next/link"
 import { useMemo, useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { events as eventsData, type Event } from "../events/data"
+import { events as eventsData, type Event, type TicketType } from "../events/data"
+import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 const MAX_PER_TYPE = 6
 
@@ -27,45 +28,79 @@ function formatDate(d: string) {
 function EventDetailsContent() {
   const searchParams = useSearchParams()
   const slug = searchParams.get("slug")
-  
-  const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function fetchEvents() {
-      try {
-        const res = await fetch('/api/events')
-        if (res.ok) {
-          const json = await res.json()
-          if (json.events && json.events.length > 0) {
-            const supabaseEvents: Event[] = json.events.map((ev: Record<string, unknown>) => ({
-              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
-              title: ev.title as string,
-              description: (ev.description as string) || '',
-              date: (ev.date as string).slice(0, 10),
-              image: Array.isArray(ev.images) && ev.images.length > 0
-                ? ev.images[0]
-                : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
-              location: (ev.venue as string) || '',
-            }))
-            const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-            setAllEvents([...supabaseEvents, ...eventsData, ...submittedEvents])
-            setLoading(false)
-            return
-          }
-        }
-      } catch {
-        // API unavailable — fall through to static data
-      }
-      // Fallback: static data + localStorage
-      const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-      setAllEvents([...eventsData, ...submittedEvents])
-      setLoading(false)
-    }
-    fetchEvents()
-  }, [])
+	const [event, setEvent] = useState<Event | null>(null)
+	const [isLoading, setIsLoading] = useState(true)
 
-  const event = allEvents.find((e) => e.slug === slug)
+	useEffect(() => {
+		const loadEvent = async () => {
+			if (!slug) {
+				setIsLoading(false)
+				return
+			}
+
+			const staticEvent = eventsData.find((e) => e.slug === slug)
+			if (staticEvent) {
+				setEvent(staticEvent)
+				setIsLoading(false)
+				return
+			}
+
+			const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+			const uuidMatch = slug.match(uuidRegex)
+			const eventId = uuidMatch ? uuidMatch[0] : null
+
+			if (!eventId) {
+				setIsLoading(false)
+				return
+			}
+
+			const supabase = createSupabaseBrowserClient()
+			const { data: dbEvent, error: dbError } = await supabase
+				.from('events')
+				.select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+				.eq('id', eventId)
+				.single()
+
+			if (dbError || !dbEvent) {
+				setIsLoading(false)
+				return
+			}
+
+			const { data: ticketRows } = await supabase
+				.from('ticket_types')
+				.select('event_id,name,price')
+				.eq('event_id', eventId)
+
+			const tickets: TicketType[] = (ticketRows || []).map((row) => ({
+				name: row.name,
+				price: row.price,
+			}))
+
+			const startDate = new Date(dbEvent.start_date)
+			const endDate = new Date(dbEvent.end_time)
+			const slugBase = dbEvent.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
+
+			setEvent({
+				slug: `${slugBase}-${dbEvent.id}`,
+				title: dbEvent.title,
+				description: dbEvent.description,
+				date: startDate.toISOString().slice(0, 10),
+				startTime: startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+				endTime: endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+				sportCategory: dbEvent.sport_category,
+				image: dbEvent.images?.[0],
+				location: dbEvent.venue,
+				locationUrl: dbEvent.location_url || undefined,
+				rating: 0,
+				ticketTypes: tickets,
+			})
+
+			setIsLoading(false)
+		}
+
+		loadEvent()
+	}, [slug])
 
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [paymentOption, setPaymentOption] = useState<"pay-now" | "pay-on-day">("pay-now")
@@ -120,10 +155,19 @@ function EventDetailsContent() {
     window.location.href = '/buy'
   }
 
-	if (loading) {
+	if (!event && !isLoading) {
 		return (
-			<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-				<div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
+			<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
+				<div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
+					<h1 className="text-2xl font-bold text-gray-900">Event not found</h1>
+					<p className="text-gray-600">We couldn't find this event. Please return to the events list.</p>
+					<Link
+						href="/events"
+						className="inline-flex items-center justify-center rounded-full bg-purple-600 text-white px-6 py-2 hover:bg-purple-700"
+					>
+						Back to Events
+					</Link>
+				</div>
 			</main>
 		)
 	}
@@ -132,14 +176,7 @@ function EventDetailsContent() {
 		return (
 			<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
 				<div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
-					<h1 className="text-2xl font-bold text-gray-900">Event not found</h1>
-					<p className="text-gray-600">We couldn’t find this event. Please return to the events list.</p>
-					<Link
-						href="/events"
-						className="inline-flex items-center justify-center rounded-full bg-purple-600 text-white px-6 py-2 hover:bg-purple-700"
-					>
-						Back to Events
-					</Link>
+					<h1 className="text-2xl font-bold text-gray-900">Loading event...</h1>
 				</div>
 			</main>
 		)

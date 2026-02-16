@@ -2,15 +2,17 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, use } from 'react'
+import { useRouter } from 'next/navigation'
 import { events as eventsData, type Event } from '../data'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 const MAX_PER_TYPE = 6
 
 type Props = {
-  params: {
+  params: Promise<{
     slug: string
-  }
+  }>
 }
 
 function formatDate(d: string) {
@@ -21,41 +23,77 @@ function formatDate(d: string) {
   }
 }
 
-export default function EventDetailsPage({ params }: Props) {
+export default function EventDetailsPage({ params: paramsPromise }: Props) {
+  const params = use(paramsPromise)
+  const router = useRouter()
   const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
   const [loading, setLoading] = useState(true)
-
   useEffect(() => {
-    async function fetchEvents() {
-      try {
-        const res = await fetch('/api/events')
-        if (res.ok) {
-          const json = await res.json()
-          if (json.events && json.events.length > 0) {
-            const supabaseEvents: Event[] = json.events.map((ev: Record<string, unknown>) => ({
-              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
-              title: ev.title as string,
-              description: (ev.description as string) || '',
-              date: (ev.date as string).slice(0, 10),
-              image: Array.isArray(ev.images) && ev.images.length > 0
-                ? ev.images[0]
-                : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
-              location: (ev.venue as string) || '',
-            }))
-            const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-            setAllEvents([...supabaseEvents, ...eventsData, ...submittedEvents])
-            setLoading(false)
-            return
-          }
-        }
-      } catch {
-        // API unavailable — fall through to static data
+    const loadEvents = async () => {
+      const supabase = createSupabaseBrowserClient()
+
+      const { data: dbEvents, error: dbError } = await supabase
+        .from('events')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+        .eq('status', 'published')
+
+      if (dbError) {
+        console.error('Failed to load events:', dbError.message)
+        setAllEvents(eventsData)
+        setLoading(false)
+        return
       }
-      const submittedEvents = JSON.parse(localStorage.getItem('submittedEvents') || '[]')
-      setAllEvents([...eventsData, ...submittedEvents])
+        console.error('Failed to load events:', dbError.message)
+        setAllEvents(eventsData)
+        setLoading(false)
+        return
+      }
+
+      const eventIds = (dbEvents || []).map((e) => e.id)
+      let ticketRows: Array<{ event_id: number; name: string; price: number }> = []
+
+      if (eventIds.length > 0) {
+        const { data: tickets, error: ticketError } = await supabase
+          .from('ticket_types')
+          .select('event_id,name,price')
+          .in('event_id', eventIds)
+
+        if (!ticketError && tickets) {
+          ticketRows = tickets
+        }
+      }
+
+      const ticketsByEventId = ticketRows.reduce<Record<number, { name: string; price: number }[]>>((acc, row) => {
+        if (!acc[row.event_id]) acc[row.event_id] = []
+        acc[row.event_id].push({ name: row.name, price: row.price })
+        return acc
+      }, {})
+
+      const mappedEvents: Event[] = (dbEvents || []).map((e) => {
+        const startDate = new Date(e.start_date)
+        const endDate = new Date(e.end_time)
+        const slugBase = e.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
+        return {
+          slug: `${slugBase}-${e.id}`,
+          title: e.title,
+          description: e.description,
+          date: startDate.toISOString().slice(0, 10),
+          startTime: startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          endTime: endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          sportCategory: e.sport_category,
+          image: e.images?.[0],
+          location: e.venue,
+          locationUrl: e.location_url || undefined,
+          rating: 0,
+          ticketTypes: ticketsByEventId[e.id] || [],
+        }
+      })
+
+      setAllEvents([...eventsData, ...mappedEvents])
       setLoading(false)
     }
-    fetchEvents()
+
+    loadEvents()
   }, [])
 
   const event = allEvents.find((e) => e.slug === params.slug)
@@ -115,7 +153,7 @@ export default function EventDetailsPage({ params }: Props) {
   if (loading) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
+        <div className="text-gray-600">Loading event...</div>
       </main>
     )
   }
@@ -124,9 +162,10 @@ export default function EventDetailsPage({ params }: Props) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
         <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
-          <h1 className="text-2xl font-bold text-gray-900">Event not found</h1>
-          <p className="text-gray-600">We couldn’t find this event. Please return to the events list.</p>
-          <Link href="/events" className="inline-flex items-center justify-center rounded-full bg-purple-600 text-white px-6 py-2 hover:bg-purple-700">
+          <div className="text-6xl mb-4">✅</div>
+          <h1 className="text-2xl font-bold text-green-600">Event Successfully Submitted!</h1>
+          <p className="text-gray-600">Your event has been created and will appear in the events list shortly.</p>
+          <Link href="/events" className="inline-flex items-center justify-center rounded-full bg-purple-600 text-white px-6 py-3 hover:bg-purple-700 font-semibold">
             Back to Events
           </Link>
         </div>

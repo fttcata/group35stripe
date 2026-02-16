@@ -3,7 +3,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import EventCard from '../components/EventCard'
-import { events as eventsData, Event } from './data'
+import { events as eventsData, type Event, type TicketType } from './data'
+import Link from 'next/link'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 const EventMap = dynamic(() => import('../components/EventMap'), { ssr: false })
 
@@ -44,45 +46,66 @@ export default function EventsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
-    async function fetchEvents() {
-      try {
-        const res = await fetch('/api/events')
-        if (res.ok) {
-          const json = await res.json()
-          if (json.events && json.events.length > 0) {
-            const supabaseEvents: Event[] = json.events.map((ev: Record<string, unknown>) => ({
-              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
-              title: ev.title as string,
-              description: (ev.description as string) || '',
-              date: (ev.date as string).slice(0, 10),
-              image: Array.isArray(ev.images) && ev.images.length > 0
-                ? ev.images[0]
-                : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
-              location: (ev.venue as string) || '',
-              sportCategory: (ev.sport_category as string) || undefined,
-            }))
+    const loadEvents = async () => {
+      const supabase = createSupabaseBrowserClient()
 
-            const submittedEvents = JSON.parse(
-              localStorage.getItem('submittedEvents') || '[]'
-            ) as Event[]
+      const { data: dbEvents, error: dbError } = await supabase
+        .from('events')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+        .eq('status', 'published')
 
-            setAllEvents([...supabaseEvents, ...submittedEvents])
-            setLoading(false)
-            return
-          }
-        }
-      } catch {
-        // API unavailable — fall through to static data
+      if (dbError) {
+        console.error('Failed to load events:', dbError.message)
+        setAllEvents(eventsData)
+        setLoading(false)
+        return
       }
 
-      const submittedEvents = JSON.parse(
-        localStorage.getItem('submittedEvents') || '[]'
-      ) as Event[]
-      setAllEvents([...eventsData, ...submittedEvents])
+      const eventIds = (dbEvents || []).map((e) => e.id)
+      let ticketRows: Array<{ event_id: number; name: string; price: number }> = []
+
+      if (eventIds.length > 0) {
+        const { data: tickets, error: ticketError } = await supabase
+          .from('ticket_types')
+          .select('event_id,name,price')
+          .in('event_id', eventIds)
+
+        if (!ticketError && tickets) {
+          ticketRows = tickets
+        }
+      }
+
+      const ticketsByEventId = ticketRows.reduce<Record<number, TicketType[]>>((acc, row) => {
+        if (!acc[row.event_id]) acc[row.event_id] = []
+        acc[row.event_id].push({ name: row.name, price: row.price })
+        return acc
+      }, {})
+
+      const mappedEvents: Event[] = (dbEvents || []).map((e) => {
+        const startDate = new Date(e.start_date)
+        const endDate = new Date(e.end_time)
+        const slugBase = e.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
+        return {
+          slug: `${slugBase}-${e.id}`,
+          title: e.title,
+          description: e.description,
+          date: startDate.toISOString().slice(0, 10),
+          startTime: startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          endTime: endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          sportCategory: e.sport_category,
+          image: e.images?.[0],
+          location: e.venue,
+          locationUrl: e.location_url || undefined,
+          rating: 0,
+          ticketTypes: ticketsByEventId[e.id] || [],
+        }
+      })
+
+      setAllEvents([...eventsData, ...mappedEvents])
       setLoading(false)
     }
 
-    fetchEvents()
+    loadEvents()
   }, [])
 
   // Derive unique locations for the location filter dropdown
@@ -162,6 +185,30 @@ export default function EventsPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+      {/* Top Navigation */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
+          <Link
+            href="/my-events"
+            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+          >
+            My Events
+          </Link>
+          <Link
+            href="/drafts"
+            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+          >
+            Drafts
+          </Link>
+          <Link
+            href="/submit-event"
+            className="text-sm bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-purple-700"
+          >
+            + Create Event
+          </Link>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-700 text-white">
         <div className="absolute inset-0 bg-black/10"></div>
