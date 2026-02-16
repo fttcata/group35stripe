@@ -8,7 +8,8 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from('events')
-      .select('*')\n      .order('date', { ascending: true })
+      .select('*')
+      .order('date', { ascending: true })
 
     if (error) {
       console.error('Failed to fetch events:', error)

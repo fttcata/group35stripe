@@ -3,7 +3,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useMemo, useState, useEffect, use } from 'react'
-import { useRouter } from 'next/navigation'
 import { events as eventsData, type Event } from '../data'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
@@ -25,7 +24,6 @@ function formatDate(d: string) {
 
 export default function EventDetailsPage({ params: paramsPromise }: Props) {
   const params = use(paramsPromise)
-  const router = useRouter()
   const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -38,11 +36,6 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
         .eq('status', 'published')
 
       if (dbError) {
-        console.error('Failed to load events:', dbError.message)
-        setAllEvents(eventsData)
-        setLoading(false)
-        return
-      }
         console.error('Failed to load events:', dbError.message)
         setAllEvents(eventsData)
         setLoading(false)

@@ -20,6 +20,7 @@ export default function SuccessContent() {
     }
 
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStoredEmail(window.localStorage.getItem('checkInEmail'));
     } catch {
       setStoredEmail(null);

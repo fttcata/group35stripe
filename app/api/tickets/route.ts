@@ -71,8 +71,8 @@ export async function POST(req: NextRequest) {
 
     // Return first matching order with all its tickets
     const order = data[0];
-    const event = (order as any).events;
-    const tickets = (order as any).tickets || [];
+    const event = (order as Record<string, unknown>).events;
+    const tickets = ((order as Record<string, unknown>).tickets as Array<unknown>) || [];
 
     return NextResponse.json({
       orderId: order.id,
@@ -95,7 +95,6 @@ export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get('email');
   const orderId = req.nextUrl.searchParams.get('orderId');
 
-  const reqBody = new Request(req);
   const body = JSON.stringify({ email, orderId });
 
   return POST(

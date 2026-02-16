@@ -185,7 +185,7 @@ async function handlePaymentIntentSucceeded(
 
     // Find order by payment intent ID stored in metadata or charges
     // This is a fallback if we're not using checkout sessions
-    const { data: order, error } = await supabase
+    const { error } = await supabase
       .from('orders')
       .update({
         payment_status: 'completed',

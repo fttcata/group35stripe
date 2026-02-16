@@ -16,6 +16,7 @@ export default function Navbar() {
 
     // Skip auth if Supabase is not configured
     if (!supabase) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false)
       return
     }

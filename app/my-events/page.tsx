@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type EventManagement = {
@@ -17,7 +16,6 @@ type EventManagement = {
 }
 
 export default function MyEventsPage() {
-  const router = useRouter()
   const [allEvents, setAllEvents] = useState<EventManagement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

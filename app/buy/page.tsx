@@ -320,7 +320,7 @@ export default function BuyPage() {
                 <p className="text-red-600 text-xs mt-1">{formErrors.email}</p>
               )}
               <p className="text-xs text-gray-500 mt-1">
-                We'll send your ticket confirmation to this email.
+                We&apos;ll send your ticket confirmation to this email.
               </p>
             </div>
             
@@ -355,7 +355,7 @@ export default function BuyPage() {
                 💳 Pay at Check-in Selected
               </p>
               <p className="text-xs text-yellow-700 mt-1">
-                You'll receive a confirmation email with your ticket. Payment will be collected when you arrive at the event.
+                You&apos;ll receive a confirmation email with your ticket. Payment will be collected when you arrive at the event.
               </p>
             </div>
           )}
