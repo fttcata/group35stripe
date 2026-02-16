@@ -1,7 +1,13 @@
 import { Resend } from 'resend';
 import { Ticket } from './ticketService';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 export interface TicketEmailData {
   customer_email: string;
@@ -245,7 +251,7 @@ export async function sendTicketConfirmationEmail(
     }));
     const ticketImageUrls = data.tickets.map((_, index) => `cid:qr_code_${index}`);
 
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'noreply@eventtickets.com',
       to: data.customer_email,
       subject: `Your Tickets for ${data.event_title} - Order ${data.order_id}`,
@@ -328,7 +334,7 @@ export async function sendPaymentReminderEmail(
       </html>
     `;
 
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'noreply@eventtickets.com',
       to: email,
       subject: `Payment Reminder: ${eventTitle} - Order ${orderId}`,
