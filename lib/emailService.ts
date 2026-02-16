@@ -252,7 +252,7 @@ export async function sendTicketConfirmationEmail(
     const ticketImageUrls = data.tickets.map((_, index) => `cid:qr_code_${index}`);
 
     const result = await getResend().emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'noreply@eventtickets.com',
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
       to: data.customer_email,
       subject: `Your Tickets for ${data.event_title} - Order ${data.order_id}`,
       html: generateEmailHTML(data, ticketImageUrls),
@@ -335,7 +335,7 @@ export async function sendPaymentReminderEmail(
     `;
 
     const result = await getResend().emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'noreply@eventtickets.com',
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
       to: email,
       subject: `Payment Reminder: ${eventTitle} - Order ${orderId}`,
       html,
