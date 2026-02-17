@@ -13,45 +13,62 @@ type Props = {
 export default function EventMapInner({ items, center }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const markersRef = useRef<L.LayerGroup | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
+    if (!containerRef.current) return
 
-    // Initialize map
-    mapRef.current = L.map(containerRef.current).setView(center, 8)
+    if (!mapRef.current) {
+      // Initialize map
+      mapRef.current = L.map(containerRef.current).setView(center, 8)
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(mapRef.current)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(mapRef.current)
 
-    // Add markers
-    items.forEach((it) => {
-      if (it.lat !== undefined && it.lng !== undefined && mapRef.current) {
-        const marker = L.circleMarker([it.lat, it.lng], {
-          radius: 8,
-          color: '#7c3aed',
-          fillColor: '#7c3aed',
-          fillOpacity: 0.9
-        }).addTo(mapRef.current)
-
-        marker.bindPopup(`
-          <div style="max-width: 200px;">
-            <strong>${it.title}</strong>
-            <div style="font-size: 12px; color: #666;">${it.location || ''}</div>
-            <div style="font-size: 11px; color: #888; margin-top: 4px;">${it.date}</div>
-          </div>
-        `)
-      }
-    })
+      markersRef.current = L.layerGroup().addTo(mapRef.current)
+    } else {
+      mapRef.current.setView(center, mapRef.current.getZoom())
+    }
 
     // Cleanup on unmount
     return () => {
       if (mapRef.current) {
         mapRef.current.remove()
         mapRef.current = null
+        markersRef.current = null
       }
     }
-  }, []) // Empty deps - only run once
+  }, [center])
+
+  useEffect(() => {
+    if (!mapRef.current || !markersRef.current) return
+
+    const markers = markersRef.current
+    markers.clearLayers()
+
+    items.forEach((it) => {
+      if (it.lat !== undefined && it.lng !== undefined) {
+        const marker = L.circleMarker([it.lat, it.lng], {
+          radius: 8,
+          color: '#7c3aed',
+          fillColor: '#7c3aed',
+          fillOpacity: 0.9
+        }).addTo(markers)
+
+        const slug = it.slug || it.title.toLowerCase().replace(/\s+/g, '-')
+
+        marker.bindPopup(`
+          <div style="max-width: 200px;">
+            <strong>${it.title}</strong>
+            <div style="font-size: 12px; color: #666;">${it.location || ''}</div>
+            <div style="font-size: 11px; color: #888; margin-top: 4px;">${it.date}</div>
+            <a href="/eventDetails?slug=${encodeURIComponent(slug)}" style="display:inline-block;margin-top:8px;padding:4px 12px;background:#7c3aed;color:#fff;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View Event</a>
+          </div>
+        `)
+      }
+    })
+  }, [items])
 
   return <div ref={containerRef} className="h-full w-full" />
 }

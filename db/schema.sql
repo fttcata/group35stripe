@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS events (
   description text,
   date timestamptz NOT NULL,
   venue text,
+  sport_category text,
   images text[] DEFAULT ARRAY[]::text[],
   created_at timestamptz DEFAULT now()
 );
@@ -28,9 +29,7 @@ CREATE TABLE IF NOT EXISTS orders (
   event_id uuid REFERENCES events(id),
   total_amount numeric(10,2) NOT NULL,
   payment_status text NOT NULL DEFAULT 'pending',
-  customer_email text,
-  payment_method text DEFAULT 'stripe',
-  stripe_session_id text UNIQUE,
+  stripe_session_id text UNIQUE,\n  is_guest boolean DEFAULT false,\n  guest_name text,\n  guest_email text,\n  guest_phone text,\n  customer_email text,\n  payment_method text DEFAULT 'stripe',
   created_at timestamptz DEFAULT now()
 );
 

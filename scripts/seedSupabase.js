@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('path')
 const fs = require('fs')
 
@@ -50,7 +50,7 @@ async function runSchemaIfNeeded() {
 async function ensureTables() {
   try {
     // simple check whether events table exists
-    const { data, error } = await supabase.from('events').select('id').limit(1)
+    const { error } = await supabase.from('events').select('id').limit(1)
     if (error) {
       console.error('Could not access `events` table. Please run the SQL in db/schema.sql in your Supabase SQL editor first.')
       console.error('Full error:', error.message || error)
@@ -80,11 +80,11 @@ async function seed() {
   console.log('Seeding sample events and ticket types...')
 
   const events = [
-    { title: 'City Marathon 2026', description: 'Run through the city landmarks.', date: '2026-05-15T09:00:00Z', venue: 'City Center', images: ['/images/marathon1.jpg'] },
-    { title: 'Trail Run Adventure', description: 'A challenging trail run in the hills.', date: '2026-06-20T08:00:00Z', venue: 'Hill Park', images: ['/images/trail1.jpg','/images/trail2.jpg'] },
-    { title: '5K Charity Fun Run', description: 'Family-friendly 5K to raise funds.', date: '2026-04-10T10:00:00Z', venue: 'Community Grounds', images: ['/images/5k.jpg'] },
-    { title: 'Night Relay', description: 'Team relay race under lights.', date: '2026-07-02T20:00:00Z', venue: 'Stadium', images: ['/images/relay.jpg'] },
-    { title: 'Ultra Endurance Challenge', description: 'Ultra-distance event for experienced runners.', date: '2026-08-14T06:00:00Z', venue: 'Lakeside', images: ['/images/ultra.jpg'] }
+    { title: 'City Marathon 2026', description: 'Run through the city landmarks.', date: '2026-05-15T09:00:00Z', venue: 'City Center', sport_category: 'Running', images: ['/images/marathon1.jpg'] },
+    { title: 'Trail Run Adventure', description: 'A challenging trail run in the hills.', date: '2026-06-20T08:00:00Z', venue: 'Hill Park', sport_category: 'Running', images: ['/images/trail1.jpg','/images/trail2.jpg'] },
+    { title: '5K Charity Fun Run', description: 'Family-friendly 5K to raise funds.', date: '2026-04-10T10:00:00Z', venue: 'Community Grounds', sport_category: 'Running', images: ['/images/5k.jpg'] },
+    { title: 'Night Relay', description: 'Team relay race under lights.', date: '2026-07-02T20:00:00Z', venue: 'Stadium', sport_category: 'Running', images: ['/images/relay.jpg'] },
+    { title: 'Ultra Endurance Challenge', description: 'Ultra-distance event for experienced runners.', date: '2026-08-14T06:00:00Z', venue: 'Lakeside', sport_category: 'Running', images: ['/images/ultra.jpg'] }
   ]
 
   const { data: insertedEvents, error: insertErr } = await supabase.from('events').insert(events).select('id,title')

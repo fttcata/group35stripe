@@ -15,7 +15,7 @@ export default function MyTicketsPage() {
   const [tickets, setTickets] = useState<TicketInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [eventInfo, setEventInfo] = useState<any>(null);
+  const [eventInfo, setEventInfo] = useState<{ title?: string; date?: string; venue?: string } | null>(null);
 
   const handleRetrieveTickets = async (e: FormEvent) => {
     e.preventDefault();

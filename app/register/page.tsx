@@ -33,6 +33,11 @@ export default function RegisterPage() {
     setLoading(true)
 
     const supabase = createSupabaseBrowserClient()
+    if (!supabase) {
+      setError('Authentication is not configured. Please set up Supabase credentials.')
+      setLoading(false)
+      return
+    }
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,

@@ -1,10 +1,35 @@
 # GitLab CI/CD configuration
 stages:
   - test
+  - build
 
-# Build test job - runs on all branches
-build_test:
+# Lint job
+lint:
   stage: test
+  script:
+    - npm ci --legacy-peer-deps
+    - npm run lint
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-protected
+    paths:
+      - node_modules/
+      - .next/cache/
+
+# Typecheck job
+typecheck:
+  stage: test
+  script:
+    - npm ci --legacy-peer-deps
+    - npm run typecheck
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-protected
+    paths:
+      - node_modules/
+      - .next/cache/
+
+# Build job
+build:
+  stage: build
   script:
     - npm ci --legacy-peer-deps
     - STRIPE_SECRET_KEY=sk_test_placeholder NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder npm run build
