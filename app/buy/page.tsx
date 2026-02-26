@@ -177,6 +177,8 @@ export default function BuyPage() {
             eventTitle: ticketDetails.eventName,
             eventDate: ticketDetails.eventDate,
             amount: ticketDetails.totalPrice,
+            eventId: ticketDetails.eventId,
+            quantity: ticketDetails.quantity,
           }),
         });
 
