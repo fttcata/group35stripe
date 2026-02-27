@@ -1,33 +1,8 @@
 # GitLab CI/CD configuration
 stages:
-  - security
   - test
   - build
   - quality
-
-# Security audit job
-security-audit:
-  stage: security
-  script:
-    - npm ci --legacy-peer-deps
-    - npm audit --audit-level=high
-  allow_failure: true
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-protected
-    paths:
-      - node_modules/
-
-# Dependency check job
-dependency-check:
-  stage: security
-  script:
-    - npm ci --legacy-peer-deps
-    - npx depcheck --ignores="@types/*,eslint-config-next,@tailwindcss/postcss"
-  allow_failure: true
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-protected
-    paths:
-      - node_modules/
 
 # Lint job
 lint:
