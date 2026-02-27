@@ -1,7 +1,33 @@
 # GitLab CI/CD configuration
 stages:
+  - security
   - test
   - build
+  - quality
+
+# Security audit job
+security-audit:
+  stage: security
+  script:
+    - npm ci --legacy-peer-deps
+    - npm audit --audit-level=high
+  allow_failure: true
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-protected
+    paths:
+      - node_modules/
+
+# Dependency check job
+dependency-check:
+  stage: security
+  script:
+    - npm ci --legacy-peer-deps
+    - npx depcheck --ignores="@types/*,eslint-config-next,@tailwindcss/postcss"
+  allow_failure: true
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-protected
+    paths:
+      - node_modules/
 
 # Lint job
 lint:
@@ -33,8 +59,60 @@ build:
   script:
     - npm ci --legacy-peer-deps
     - STRIPE_SECRET_KEY=sk_test_placeholder NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder npm run build
+  artifacts:
+    paths:
+      - .next/
+    expire_in: 1 day
   cache:
     key: ${CI_COMMIT_REF_SLUG}-protected
     paths:
       - node_modules/
       - .next/cache/
+
+# Environment variable check
+env-check:
+  stage: quality
+  script:
+    - |
+      echo "Checking for hardcoded secrets..."
+      if grep -r "sk_live_" app/ lib/ --exclude-dir=node_modules || 
+         grep -r "pk_live_" app/ lib/ --exclude-dir=node_modules; then
+        echo "ERROR: Found potential hardcoded Stripe live keys!"
+        exit 1
+      fi
+      echo "No hardcoded live keys found."
+  allow_failure: false
+
+# Build size check
+build-size-check:
+  stage: quality
+  dependencies:
+    - build
+  script:
+    - |
+      echo "Checking build output size..."
+      BUILD_SIZE=$(du -sh .next | cut -f1)
+      echo "Build size: $BUILD_SIZE"
+      # This is informational for now
+  allow_failure: true
+  artifacts:
+    paths:
+      - .next/
+
+# Package.json validation
+package-validation:
+  stage: quality
+  script:
+    - npm ci --legacy-peer-deps
+    - |
+      echo "Validating package.json structure..."
+      node -e "const pkg = require('./package.json'); 
+      if (!pkg.name || !pkg.version || !pkg.scripts || !pkg.dependencies) {
+        console.error('Invalid package.json structure');
+        process.exit(1);
+      }
+      console.log('package.json is valid');"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-protected
+    paths:
+      - node_modules/
