@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation"
 import { events as eventsData, type Event, type TicketType } from "../events/data"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
-const MAX_PER_TYPE = 6
+export const dynamic = 'force-dynamic'
 
 function formatDate(d: string) {
 	try {
@@ -22,12 +22,19 @@ function formatDate(d: string) {
 	}
 }
 
+type TicketAvailability = {
+	total: number
+	sold: number
+	available: number
+}
+
 export default function EventDetailsPage() {
   const searchParams = useSearchParams()
   const slug = searchParams.get("slug")
 
 	const [event, setEvent] = useState<Event | null>(null)
 	const [isLoading, setIsLoading] = useState(true)
+	const [ticketAvailability, setTicketAvailability] = useState<Record<number, TicketAvailability>>({})
 
 	useEffect(() => {
 		const loadEvent = async () => {
@@ -66,13 +73,41 @@ export default function EventDetailsPage() {
 
 			const { data: ticketRows } = await supabase
 				.from('ticket_types')
-				.select('event_id,name,price')
+				.select('id,name,price,quantity')
 				.eq('event_id', eventId)
 
 			const tickets: TicketType[] = (ticketRows || []).map((row) => ({
 				name: row.name,
 				price: row.price,
 			}))
+
+			// Fetch sold count for each ticket type
+			const availability: Record<number, TicketAvailability> = {}
+			for (let i = 0; i < (ticketRows || []).length; i++) {
+				const row = ticketRows![i]
+				try {
+					const { data: soldTickets } = await supabase
+						.from('tickets')
+						.select('id', { count: 'exact', head: false })
+						.eq('ticket_type_id', row.id)
+					
+					const sold = soldTickets?.length || 0
+					const total = row.quantity || 0
+					availability[i] = {
+						total,
+						sold,
+						available: Math.max(0, total - sold)
+					}
+				} catch (err) {
+					// Tickets table might not exist, assume all are available
+					availability[i] = {
+						total: row.quantity || 0,
+						sold: 0,
+						available: row.quantity || 0
+					}
+				}
+			}
+			setTicketAvailability(availability)
 
 			const startDate = new Date(dbEvent.start_date)
 			const endDate = new Date(dbEvent.end_time)
@@ -127,7 +162,11 @@ export default function EventDetailsPage() {
 		return { totalTickets, totalPrice }
 	}, [quantities, event])
 
-	const overMax = event?.ticketTypes?.some((_, index) => (quantities[index.toString()] ?? 0) > MAX_PER_TYPE) ?? false
+	const overMax = event?.ticketTypes?.some((_, index) => {
+		const available = ticketAvailability[index]?.available ?? 0
+		const selected = quantities[index.toString()] ?? 0
+		return selected > available
+	}) ?? false
 	const hasMinimum = totals.totalTickets >= 1
 	const isValid = hasMinimum && !overMax
 
@@ -226,60 +265,71 @@ export default function EventDetailsPage() {
 					<section className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
 						<div className="flex items-center justify-between">
 							<h2 className="text-2xl font-bold text-gray-900">Select Tickets</h2>
-							<span className="text-sm text-gray-500">Max {MAX_PER_TYPE} per type</span>
 						</div>
 
 						<div className="space-y-4">
-							{event.ticketTypes && event.ticketTypes.map((ticket, index) => (
-								<div key={index} className="flex items-center justify-between rounded-xl border border-gray-100 p-4">
-									<div>
-										<div className="font-semibold text-gray-900">{ticket.name}</div>
-										<div className="text-sm text-gray-500">${ticket.price.toFixed(2)} each</div>
+							{event.ticketTypes && event.ticketTypes.map((ticket, index) => {
+								const availability = ticketAvailability[index] || { available: 0, total: 0, sold: 0 }
+								const currentQuantity = quantities[index.toString()] ?? 0
+								const canIncrement = currentQuantity < availability.available
+								const isOutOfStock = availability.available === 0
+
+								return (
+									<div key={index} className="flex items-center justify-between rounded-xl border border-gray-100 p-4">
+										<div>
+											<div className="font-semibold text-gray-900">{ticket.name}</div>
+											<div className="text-sm text-gray-500">${ticket.price.toFixed(2)} each</div>
+											<div className={`text-xs font-semibold mt-1 ${
+												isOutOfStock ? 'text-red-600' : 'text-green-600'
+											}`}>
+												{isOutOfStock ? '❌ Sold Out' : `✓ ${availability.available} available`}
+											</div>
+										</div>
+										<div className="flex items-center gap-3">
+											<button
+												type="button"
+												className="h-9 w-9 rounded-full border border-gray-200 text-lg hover:bg-gray-50 disabled:opacity-50"
+												onClick={() =>
+													setQuantities((q) => ({
+														...q,
+														[index.toString()]: Math.max(0, (q[index.toString()] ?? 0) - 1),
+													}))
+												}
+												disabled={(quantities[index.toString()] ?? 0) <= 0}
+												aria-label={`Decrease ${ticket.name} tickets`}
+											>
+												−
+											</button>
+											<input
+												type="number"
+												min={0}
+												max={availability.available}
+												value={quantities[index.toString()] ?? 0}
+												onChange={(e) => {
+													const value = Math.min(availability.available, Math.max(0, Number(e.target.value) || 0))
+													setQuantities((q) => ({ ...q, [index.toString()]: value }))
+												}}
+												className="w-14 text-center border border-gray-200 rounded-lg py-1"
+												aria-label={`${ticket.name} ticket quantity`}
+											/>
+											<button
+												type="button"
+												className="h-9 w-9 rounded-full border border-gray-200 text-lg hover:bg-gray-50 disabled:opacity-50"
+												onClick={() =>
+													setQuantities((q) => ({
+														...q,
+														[index.toString()]: Math.min(availability.available, (q[index.toString()] ?? 0) + 1),
+													}))
+												}
+												disabled={!canIncrement}
+												aria-label={`Increase ${ticket.name} tickets`}
+											>
+												+
+											</button>
+										</div>
 									</div>
-									<div className="flex items-center gap-3">
-										<button
-											type="button"
-											className="h-9 w-9 rounded-full border border-gray-200 text-lg hover:bg-gray-50 disabled:opacity-50"
-											onClick={() =>
-												setQuantities((q) => ({
-													...q,
-													[index.toString()]: Math.max(0, (q[index.toString()] ?? 0) - 1),
-												}))
-											}
-											disabled={(quantities[index.toString()] ?? 0) <= 0}
-											aria-label={`Decrease ${ticket.name} tickets`}
-										>
-											−
-										</button>
-										<input
-											type="number"
-											min={0}
-											max={MAX_PER_TYPE}
-											value={quantities[index.toString()] ?? 0}
-											onChange={(e) => {
-												const value = Math.min(MAX_PER_TYPE, Math.max(0, Number(e.target.value) || 0))
-												setQuantities((q) => ({ ...q, [index.toString()]: value }))
-											}}
-											className="w-14 text-center border border-gray-200 rounded-lg py-1"
-											aria-label={`${ticket.name} ticket quantity`}
-										/>
-										<button
-											type="button"
-											className="h-9 w-9 rounded-full border border-gray-200 text-lg hover:bg-gray-50 disabled:opacity-50"
-											onClick={() =>
-												setQuantities((q) => ({
-													...q,
-													[index.toString()]: Math.min(MAX_PER_TYPE, (q[index.toString()] ?? 0) + 1),
-												}))
-											}
-											disabled={(quantities[index.toString()] ?? 0) >= MAX_PER_TYPE}
-											aria-label={`Increase ${ticket.name} tickets`}
-										>
-											+
-										</button>
-									</div>
-								</div>
-							))}
+								)
+							})}
 						</div>
 
 						<div className="space-y-3">
@@ -338,7 +388,7 @@ export default function EventDetailsPage() {
 						{!hasMinimum && <p className="text-sm text-red-600">Please select at least 1 ticket.</p>}
 						{overMax && (
 							<p className="text-sm text-red-600">
-								You can select up to {MAX_PER_TYPE} tickets per type.
+								You've exceeded the available tickets for one or more types.
 							</p>
 						)}
 

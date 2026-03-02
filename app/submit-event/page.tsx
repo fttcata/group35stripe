@@ -1,20 +1,28 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import PublishConfirmationModal from '../components/PublishConfirmationModal'
 
+export const dynamic = 'force-dynamic'
+
 type TicketType = {
   name: string
   price: number
+  quantity: number
+  id?: number
+  sold?: number
 }
 
 const SPORT_CATEGORIES = ['Running', 'Football', 'Basketball', 'Tennis', 'Swimming', 'Cycling', 'Other'] as const
 
 export default function SubmitEventPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const eventId = searchParams.get('id')
+  
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -26,23 +34,164 @@ export default function SubmitEventPage() {
     locationUrl: '',
     image: '',
   })
+  const [originalEventData, setOriginalEventData] = useState<any>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([{ name: 'General', price: 0 }])
+  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([{ name: 'General', price: 0, quantity: 0 }])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(!!eventId)
   const [error, setError] = useState('')
   const [showPublishModal, setShowPublishModal] = useState(false)
   const [pendingPublish, setPendingPublish] = useState(false)
   const [publishSuccess, setPublishSuccess] = useState(false)
+  const [dateWarning, setDateWarning] = useState('')
+  const [venueWarning, setVenueWarning] = useState('')
+  const isEditing = !!eventId
+
+  // Load event data for editing
+  useEffect(() => {
+    if (isEditing) {
+      loadEventForEdit()
+    }
+  }, [eventId])
+
+  // Detect changes in date/venue
+  useEffect(() => {
+    if (!originalEventData) return
+    
+    const dateChanged = 
+      originalEventData.date !== formData.date || 
+      originalEventData.startTime !== formData.startTime
+    const venueChanged = originalEventData.location !== formData.location
+
+    if (dateChanged) {
+      setDateWarning('⚠️ Changing the event date/time will notify all ticket holders.')
+    } else {
+      setDateWarning('')
+    }
+
+    if (venueChanged) {
+      setVenueWarning('⚠️ Changing the venue will notify all ticket holders.')
+    } else {
+      setVenueWarning('')
+    }
+  }, [formData, originalEventData])
+
+  const loadEventForEdit = async () => {
+    try {
+      const supabase = createSupabaseBrowserClient()
+
+      // Fetch event data
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,status')
+        .eq('id', eventId)
+        .single()
+
+      if (eventError || !event) {
+        setError('Failed to load event for editing')
+        setIsLoading(false)
+        return
+      }
+
+      // Fetch ticket types - try with quantity field first
+      let tickets: any[] = []
+      let ticketError
+      
+      const { data: ticketsWithQty, error: errorWithQty } = await supabase
+        .from('ticket_types')
+        .select('id,name,price,quantity')
+        .eq('event_id', eventId)
+
+      if (errorWithQty) {
+        // If quantity field doesn't exist, try without it
+        const { data: ticketsNoQty, error: errorNoQty } = await supabase
+          .from('ticket_types')
+          .select('id,name,price')
+          .eq('event_id', eventId)
+        
+        if (errorNoQty) {
+          console.warn('Failed to load ticket types:', errorNoQty)
+          tickets = []
+          ticketError = errorNoQty
+        } else {
+          // Convert to include quantity field with default value
+          tickets = (ticketsNoQty || []).map(t => ({ ...t, quantity: 0 }))
+        }
+      } else {
+        tickets = ticketsWithQty
+      }
+
+      // Fetch sold ticket counts for each ticket type
+      const ticketTypesData: TicketType[] = []
+      
+      if (tickets && tickets.length > 0) {
+        for (const ticket of tickets) {
+          let soldCount = 0
+          
+          try {
+            // Try to query tickets table to count sold tickets
+            const { data: soldTickets } = await supabase
+              .from('tickets')
+              .select('id', { count: 'exact', head: false })
+              .eq('ticket_type_id', ticket.id)
+
+            soldCount = soldTickets?.length || 0
+          } catch (err) {
+            // Tickets table might not exist yet - continue without sold count
+            console.debug(`Tickets table not available, sold count will be 0`)
+          }
+
+          ticketTypesData.push({
+            id: ticket.id,
+            name: ticket.name,
+            price: ticket.price,
+            quantity: ticket.quantity || 0,
+            sold: soldCount,
+          })
+        }
+      }
+
+      // Parse event dates
+      const startDate = new Date(event.start_date)
+      const endDate = new Date(event.end_time)
+      const dateStr = startDate.toISOString().slice(0, 10)
+      const startTimeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      const endTimeStr = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+
+      const newFormData = {
+        title: event.title,
+        description: event.description,
+        date: dateStr,
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+        sportCategory: event.sport_category as typeof SPORT_CATEGORIES[number],
+        location: event.venue,
+        locationUrl: event.location_url || '',
+        image: event.images?.[0] || '',
+      }
+
+      setFormData(newFormData)
+      setOriginalEventData(newFormData)
+      
+      setTicketTypes(ticketTypesData.length > 0 ? ticketTypesData : [{ name: 'General', price: 0, quantity: 0 }])
+    } catch (err) {
+      setError('Failed to load event')
+      console.error(err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleTicketChange = (index: number, field: 'name' | 'price', value: string) => {
+  const handleTicketChange = (index: number, field: 'name' | 'price' | 'quantity', value: string) => {
     const updated = [...ticketTypes]
-    if (field === 'price') {
-      updated[index][field] = parseFloat(value) || 0
+    if (field === 'price' || field === 'quantity') {
+      const numValue = parseFloat(value) || 0
+      updated[index][field] = numValue
     } else {
       updated[index][field] = value
     }
@@ -50,10 +199,16 @@ export default function SubmitEventPage() {
   }
 
   const addTicketType = () => {
-    setTicketTypes([...ticketTypes, { name: '', price: 0 }])
+    setTicketTypes([...ticketTypes, { name: '', price: 0, quantity: 0 }])
   }
 
   const removeTicketType = (index: number) => {
+    // Prevent removing ticket types if edited and has sells
+    if (isEditing && ticketTypes[index].sold && ticketTypes[index].sold > 0) {
+      setError(`Cannot remove ticket type "${ticketTypes[index].name}" as ${ticketTypes[index].sold} tickets have already been sold.`)
+      return
+    }
+    
     if (ticketTypes.length > 1) {
       setTicketTypes(ticketTypes.filter((_, i) => i !== index))
     }
@@ -65,20 +220,22 @@ export default function SubmitEventPage() {
       return false
     }
 
-    // Validate date is in the future
-    const eventDateTime = new Date(`${formData.date}T${formData.startTime}`)
-    if (eventDateTime <= new Date()) {
-      setError('Event date must be in the future')
-      return false
+    // Only validate date is in the future for new events, not when editing
+    if (!isEditing) {
+      const eventDateTime = new Date(`${formData.date}T${formData.startTime}`)
+      if (eventDateTime <= new Date()) {
+        setError('Event date must be in the future')
+        return false
+      }
     }
 
     return true
   }
 
   const validateTicketTypes = (): boolean => {
-    const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
+    const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0 && t.quantity > 0)
     if (validTickets.length === 0) {
-      setError('Please add at least one valid ticket type with a price')
+      setError('Please add at least one valid ticket type with a price and quantity')
       return false
     }
     return true
@@ -110,8 +267,9 @@ export default function SubmitEventPage() {
       // Initialize Supabase client
       const supabase = createSupabaseBrowserClient()
 
-      // Upload image if provided
-      let imageUrl = ''
+      let imageUrl = originalEventData?.image || ''
+
+      // Upload image if new file provided
       if (imageFile) {
         const filename = `${Date.now()}-${imageFile.name}`
         const { error: uploadError } = await supabase.storage
@@ -131,67 +289,141 @@ export default function SubmitEventPage() {
         imageUrl = publicUrl
       }
 
-      // Insert event into Supabase
-      const { data: createdEvent, error: insertError } = await supabase
-        .from('events')
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          start_date: eventDateTime.toISOString(),
-          end_time: endDateTime.toISOString(),
-          sport_category: formData.sportCategory,
-          venue: formData.location,
-          location_url: formData.locationUrl || null,
-          images: imageUrl ? [imageUrl] : [],
-          status: publish ? 'published' : 'draft',
-        })
-        .select('id')
-        .single()
+      if (isEditing) {
+        // UPDATE existing event
+        const { error: updateError } = await supabase
+          .from('events')
+          .update({
+            title: formData.title,
+            description: formData.description,
+            start_date: eventDateTime.toISOString(),
+            end_time: endDateTime.toISOString(),
+            sport_category: formData.sportCategory,
+            venue: formData.location,
+            location_url: formData.locationUrl || null,
+            images: imageUrl ? [imageUrl] : [],
+            status: publish ? 'published' : 'draft',
+          })
+          .eq('id', eventId)
 
-      if (insertError || !createdEvent) {
-        setError(`Failed to create event: ${insertError?.message || 'Unknown error'}`)
-        setIsSubmitting(false)
-        return
-      }
+        if (updateError) {
+          setError(`Failed to update event: ${updateError.message}`)
+          setIsSubmitting(false)
+          return
+        }
 
-      // Insert ticket types linked to event
-      const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
-      const ticketRows = validTickets.map((ticket) => ({
-        event_id: createdEvent.id,
-        name: ticket.name,
-        price: ticket.price,
-      }))
+        // Update ticket types
+        const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
+        
+        // Delete old tickets and insert new ones
+        const { error: deleteError } = await supabase
+          .from('ticket_types')
+          .delete()
+          .eq('event_id', eventId)
 
-      const { error: ticketInsertError } = await supabase
-        .from('ticket_types')
-        .insert(ticketRows)
+        if (deleteError) {
+          console.error('Failed to delete old tickets:', deleteError)
+        }
 
-      if (ticketInsertError) {
-        setError(`Failed to save ticket types: ${ticketInsertError.message}`)
-        setIsSubmitting(false)
-        return
-      }
+        const ticketRows = validTickets.map((ticket) => ({
+          event_id: eventId,
+          name: ticket.name,
+          price: ticket.price,
+          quantity: ticket.quantity,
+        }))
 
-      // Clear form
-      setFormData({
-        title: '',
-        description: '',
-        date: '',
-        startTime: '',
-        endTime: '',
-        sportCategory: 'Running',
-        location: '',
-        locationUrl: '',
-        image: '',
-      })
-      setImageFile(null)
-      setTicketTypes([{ name: 'General', price: 0 }])
+        const { error: ticketInsertError } = await supabase
+          .from('ticket_types')
+          .insert(ticketRows)
 
-      // Redirect based on publish status
-      if (publish) {
-        setPublishSuccess(true)
+        if (ticketInsertError) {
+          setError(`Failed to save ticket types: ${ticketInsertError.message}`)
+          setIsSubmitting(false)
+          return
+        }
+
+        // TODO: Send notifications if date or venue changed and event is published
+        if (originalEventData) {
+          const dateChanged = 
+            originalEventData.date !== formData.date || 
+            originalEventData.startTime !== formData.startTime
+          const venueChanged = originalEventData.location !== formData.location
+          
+          if ((dateChanged || venueChanged) && originalEventData.status === 'published') {
+            // In a real app, send email notifications here
+            console.log('Should notify ticket holders of changes:', { dateChanged, venueChanged })
+          }
+        }
+
+        if (publish) {
+          setPublishSuccess(true)
+        } else {
+          router.push('/my-events')
+        }
       } else {
-        router.push('/drafts')
+        // CREATE new event
+        const { data: createdEvent, error: insertError } = await supabase
+          .from('events')
+          .insert({
+            title: formData.title,
+            description: formData.description,
+            start_date: eventDateTime.toISOString(),
+            end_time: endDateTime.toISOString(),
+            sport_category: formData.sportCategory,
+            venue: formData.location,
+            location_url: formData.locationUrl || null,
+            images: imageUrl ? [imageUrl] : [],
+            status: publish ? 'published' : 'draft',
+          })
+          .select('id')
+          .single()
+
+        if (insertError || !createdEvent) {
+          setError(`Failed to create event: ${insertError?.message || 'Unknown error'}`)
+          setIsSubmitting(false)
+          return
+        }
+
+        // Insert ticket types linked to event
+        const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0 && t.quantity > 0)
+        const ticketRows = validTickets.map((ticket) => ({
+          event_id: createdEvent.id,
+          name: ticket.name,
+          price: ticket.price,
+          quantity: ticket.quantity,
+        }))
+
+        const { error: ticketInsertError } = await supabase
+          .from('ticket_types')
+          .insert(ticketRows)
+
+        if (ticketInsertError) {
+          setError(`Failed to save ticket types: ${ticketInsertError.message}`)
+          setIsSubmitting(false)
+          return
+        }
+
+        // Clear form
+        setFormData({
+          title: '',
+          description: '',
+          date: '',
+          startTime: '',
+          endTime: '',
+          sportCategory: 'Running',
+          location: '',
+          locationUrl: '',
+          image: '',
+        })
+        setImageFile(null)
+        setTicketTypes([{ name: 'General', price: 0, quantity: 0 }])
+
+        // Redirect based on publish status
+        if (publish) {
+          setPublishSuccess(true)
+        } else {
+          router.push('/drafts')
+        }
       }
     } catch (err) {
       setError('Failed to submit event. Please try again.')
@@ -207,10 +439,18 @@ export default function SubmitEventPage() {
     setPendingPublish(false)
   }
 
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading event...</div>
+      </main>
+    )
+  }
+
   if (isSubmitting) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-        <div className="text-gray-600">Submitting...</div>
+        <div className="text-gray-600">{isEditing ? 'Updating...' : 'Submitting...'}</div>
       </main>
     )
   }
@@ -221,14 +461,14 @@ export default function SubmitEventPage() {
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center space-y-6">
           <div className="text-6xl">✅</div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-green-600">Event Published!</h1>
-            <p className="text-gray-600">Your event has been successfully published and is now live.</p>
+            <h1 className="text-3xl font-bold text-green-600">{isEditing ? 'Event Updated!' : 'Event Published!'}</h1>
+            <p className="text-gray-600">{isEditing ? 'Your event has been successfully updated.' : 'Your event has been successfully published and is now live.'}</p>
           </div>
           <button
-            onClick={() => router.push('/events')}
+            onClick={() => router.push(isEditing ? '/my-events' : '/events')}
             className="w-full rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700"
           >
-            View All Events
+            {isEditing ? 'Back to My Events' : 'View All Events'}
           </button>
         </div>
       </main>
@@ -253,13 +493,29 @@ export default function SubmitEventPage() {
         </div>
 
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Submit New Event</h1>
-          <p className="text-gray-600 mb-6">Create and share your event with the community</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {isEditing ? 'Edit Event' : 'Submit New Event'}
+          </h1>
+          <p className="text-gray-600 mb-6">
+            {isEditing ? 'Update your event details' : 'Create and share your event with the community'}
+          </p>
 
           <form className="space-y-6">
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 p-4">
                 <p className="text-red-800">{error}</p>
+              </div>
+            )}
+
+            {dateWarning && (
+              <div className="rounded-lg bg-orange-50 border border-orange-200 p-4">
+                <p className="text-orange-800">{dateWarning}</p>
+              </div>
+            )}
+
+            {venueWarning && (
+              <div className="rounded-lg bg-orange-50 border border-orange-200 p-4">
+                <p className="text-orange-800">{venueWarning}</p>
               </div>
             )}
 
@@ -420,37 +676,63 @@ export default function SubmitEventPage() {
 
             {/* Ticket Types */}
             <div className="space-y-4">
-              <label className="block text-sm font-semibold text-gray-900">
-                Ticket Types & Prices *
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-900">
+                  Ticket Types & Prices *
+                </label>
+                {isEditing && ticketTypes.some(t => t.sold && t.sold > 0) && (
+                  <span className="text-xs text-gray-500">
+                    Ticket types with sales cannot be removed
+                  </span>
+                )}
+              </div>
               {ticketTypes.map((ticket, index) => (
-                <div key={index} className="flex gap-3">
-                  <input
-                    type="text"
-                    placeholder="Ticket name (e.g., General, Student)"
-                    value={ticket.name}
-                    onChange={(e) => handleTicketChange(index, 'name', e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-                    required
-                  />
-                  <input
-                    type="number"
-                    placeholder="Price"
-                    min="0"
-                    step="0.01"
-                    value={ticket.price || ''}
-                    onChange={(e) => handleTicketChange(index, 'price', e.target.value)}
-                    className="w-32 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-                    required
-                  />
-                  {ticketTypes.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeTicketType(index)}
-                      className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      ✕
-                    </button>
+                <div key={index} className="space-y-2">
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      placeholder="Ticket name (e.g., General, Student)"
+                      value={ticket.name}
+                      onChange={(e) => handleTicketChange(index, 'name', e.target.value)}
+                      className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                      required
+                    />
+                    <input
+                      type="number"
+                      placeholder="Price"
+                      min="0"
+                      step="0.01"
+                      value={ticket.price || ''}
+                      onChange={(e) => handleTicketChange(index, 'price', e.target.value)}
+                      className="w-32 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                      required
+                    />
+                    <input
+                      type="number"
+                      placeholder="Quantity"
+                      min="0"
+                      value={ticket.quantity || ''}
+                      onChange={(e) => handleTicketChange(index, 'quantity', e.target.value)}
+                      className="w-28 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                      title="Total number of tickets available"
+                      required
+                    />
+                    {ticketTypes.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeTicketType(index)}
+                        className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!!(isEditing && ticket.sold && ticket.sold > 0)}
+                        title={isEditing && ticket.sold && ticket.sold > 0 ? `Cannot remove - ${ticket.sold} tickets sold` : 'Remove ticket type'}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {isEditing && ticket.sold !== undefined && ticket.sold > 0 && (
+                    <p className="text-sm text-blue-600 ml-1">
+                      📊 {ticket.sold} ticket{ticket.sold !== 1 ? 's' : ''} sold
+                    </p>
                   )}
                 </div>
               ))}
@@ -471,7 +753,7 @@ export default function SubmitEventPage() {
                 disabled={isSubmitting}
                 className="flex-1 rounded-full bg-gray-200 text-gray-900 py-3 font-semibold hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Saving...' : 'Save as Draft'}
+                {isSubmitting ? (isEditing ? 'Saving Changes...' : 'Saving...') : (isEditing ? 'Save Changes' : 'Save as Draft')}
               </button>
               <button
                 type="button"
@@ -485,10 +767,10 @@ export default function SubmitEventPage() {
                 disabled={isSubmitting}
                 className="flex-1 rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Publishing...' : 'Publish Event'}
+                {isSubmitting ? (isEditing ? 'Updating...' : 'Publishing...') : (isEditing ? 'Update & Publish' : 'Publish Event')}
               </button>
               <Link
-                href="/events"
+                href={isEditing ? '/my-events' : '/events'}
                 className="flex-1 rounded-full border border-gray-200 text-gray-900 py-3 font-semibold text-center hover:bg-gray-50"
               >
                 Cancel
