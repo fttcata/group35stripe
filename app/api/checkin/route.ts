@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendPaymentReminderEmail } from '../../../lib/emailService';
+import { supabase } from '../../../lib/supabaseClient';
 
 interface CheckInRequest {
   email?: string;
   eventTitle?: string;
   eventDate?: string;
   amount?: number;
+  eventId?: string;
+  quantity?: number;
 }
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,12 +21,56 @@ export async function POST(req: NextRequest) {
     const eventTitle = body.eventTitle?.trim() || 'Event Ticket';
     const eventDate = body.eventDate?.trim() || new Date().toISOString();
     const amount = typeof body.amount === 'number' && Number.isFinite(body.amount) ? body.amount : 0;
+    const eventId = body.eventId?.trim();
+    const quantity = typeof body.quantity === 'number' && Number.isFinite(body.quantity) && body.quantity > 0
+      ? Math.floor(body.quantity)
+      : 1;
+    const eventIdForDb = eventId && UUID_REGEX.test(eventId) ? eventId : null;
 
     if (!email || !email.includes('@')) {
       return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });
     }
 
-    const orderId = `CHECKIN-${Date.now()}`;
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+    }
+
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert([
+        {
+          event_id: eventIdForDb,
+          customer_email: email,
+          payment_method: 'pay-on-day',
+          total_amount: amount,
+          payment_status: 'pending',
+        },
+      ])
+      .select('id')
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json(
+        { error: orderError?.message || 'Failed to create pending check-in order' },
+        { status: 500 }
+      );
+    }
+
+    const orderId = order.id as string;
+
+    const { error: orderItemError } = await supabase
+      .from('order_items')
+      .insert([
+        {
+          order_id: orderId,
+          quantity,
+        },
+      ]);
+
+    if (orderItemError) {
+      console.warn('Failed to create order_items row for check-in order:', orderItemError);
+    }
+
     const emailResult = await sendPaymentReminderEmail(
       email,
       eventTitle,
@@ -41,6 +90,7 @@ export async function POST(req: NextRequest) {
       success: true,
       messageId: emailResult.messageId,
       orderId,
+      amountDue: amount,
     });
   } catch (error) {
     return NextResponse.json(
