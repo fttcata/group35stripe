@@ -85,6 +85,14 @@ export default function Navbar() {
                     <p className="text-xs text-gray-500 capitalize">{role || 'attendee'}</p>
                   </div>
 
+                  <Link
+                    href="/purchases/history"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    My Purchases
+                  </Link>
+
                   {role === 'organizer' && (
                     <Link
                       href="/submit-event"
