@@ -412,7 +412,7 @@ function EventDetailsContent() {
 						{!hasMinimum && <p className="text-sm text-red-600">Please select at least 1 ticket.</p>}
 						{overMax && (
 							<p className="text-sm text-red-600">
-								You've exceeded the available tickets for one or more types.
+								You&apos;ve exceeded the available tickets for one or more types.
 							</p>
 						)}
 

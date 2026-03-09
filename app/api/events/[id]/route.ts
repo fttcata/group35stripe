@@ -50,7 +50,7 @@ export async function PUT(
       }
 
       // Insert new tickets
-      const ticketRows = body.ticketTypes.map((ticket: any) => ({
+      const ticketRows = body.ticketTypes.map((ticket: { name: string; price: number }) => ({
         event_id: id,
         name: ticket.name,
         price: ticket.price,

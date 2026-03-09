@@ -37,7 +37,7 @@ export default function SubmitEventPage() {
   })
   const [extractedCoords, setExtractedCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [showLocationHelp, setShowLocationHelp] = useState(false)
-  const [originalEventData, setOriginalEventData] = useState<any>(null)
+  const [originalEventData, setOriginalEventData] = useState<Record<string, string> | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([{ name: 'General', price: 0, quantity: 0 }])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -97,7 +97,7 @@ export default function SubmitEventPage() {
       }
 
       // Fetch ticket types - try with quantity field first
-      let tickets: any[] = []
+      let tickets: { id?: number; name: string; price: number; quantity?: number; sold?: number }[] = []
       let ticketError
       
       const { data: ticketsWithQty, error: errorWithQty } = await supabase
@@ -139,7 +139,7 @@ export default function SubmitEventPage() {
               .eq('ticket_type_id', ticket.id)
 
             soldCount = soldTickets?.length || 0
-          } catch (err) {
+          } catch {
             // Tickets table might not exist yet - continue without sold count
             console.debug(`Tickets table not available, sold count will be 0`)
           }

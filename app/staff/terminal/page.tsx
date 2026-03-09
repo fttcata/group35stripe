@@ -111,7 +111,7 @@ export default function StaffTerminalPage() {
       setError(null);
       setStatus('Discovering readers...');
       const result = await terminal.discoverReaders({ simulated });
-      if (result.error) {
+      if ('error' in result) {
         throw new Error(result.error.message);
       }
       setDiscoveredReaders(result.discoveredReaders || []);
@@ -131,7 +131,7 @@ export default function StaffTerminalPage() {
       setError(null);
       setStatus(`Connecting to reader ${reader.label || reader.serial_number || reader.id}...`);
       const result = await terminal.connectReader(reader);
-      if (result.error) {
+      if ('error' in result) {
         throw new Error(result.error.message);
       }
       setConnectedReader(result.reader || reader);
@@ -190,13 +190,13 @@ export default function StaffTerminalPage() {
 
       setStatus('Present card to reader...');
       const collectResult = await terminal.collectPaymentMethod(createIntentData.clientSecret);
-      if (collectResult.error) {
+      if ('error' in collectResult) {
         throw new Error(collectResult.error.message);
       }
 
       setStatus('Processing payment...');
       const processResult = await terminal.processPayment(collectResult.paymentIntent);
-      if (processResult.error) {
+      if ('error' in processResult) {
         throw new Error(processResult.error.message);
       }
 
