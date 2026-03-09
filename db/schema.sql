@@ -11,8 +11,18 @@ CREATE TABLE IF NOT EXISTS events (
   venue text,
   sport_category text,
   images text[] DEFAULT ARRAY[]::text[],
+  location_url text,
+  lat double precision,
+  lng double precision,
+  status text NOT NULL DEFAULT 'draft',
   created_at timestamptz DEFAULT now()
 );
+
+-- If the table already exists, add the new columns:
+-- ALTER TABLE events ADD COLUMN IF NOT EXISTS location_url text;
+-- ALTER TABLE events ADD COLUMN IF NOT EXISTS lat double precision;
+-- ALTER TABLE events ADD COLUMN IF NOT EXISTS lng double precision;
+-- ALTER TABLE events ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'draft';
 
 CREATE TABLE IF NOT EXISTS ticket_types (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

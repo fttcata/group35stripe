@@ -51,7 +51,7 @@ export default function EventsPage() {
 
       const { data: dbEvents, error: dbError } = await supabase
         .from('events')
-        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,lat,lng')
         .eq('status', 'published')
 
       if (dbError) {
@@ -96,6 +96,8 @@ export default function EventsPage() {
           image: e.images?.[0],
           location: e.venue,
           locationUrl: e.location_url || undefined,
+          lat: typeof e.lat === 'number' ? e.lat : undefined,
+          lng: typeof e.lng === 'number' ? e.lng : undefined,
           rating: 0,
           ticketTypes: ticketsByEventId[e.id] || [],
         }

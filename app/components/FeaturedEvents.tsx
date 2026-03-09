@@ -26,6 +26,8 @@ export default function FeaturedEvents() {
                 ? ev.images[0]
                 : 'https://placehold.co/600x400/6366f1/ffffff?text=Event',
               location: (ev.venue as string) || '',
+              lat: typeof ev.lat === 'number' ? ev.lat : undefined,
+              lng: typeof ev.lng === 'number' ? ev.lng : undefined,
             }))
             // Take the first 3 upcoming events
             const upcoming = mapped

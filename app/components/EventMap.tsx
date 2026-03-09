@@ -37,7 +37,11 @@ export default function EventMap({ items }: Props) {
     <section className="py-8">
       <div className="max-w-4xl mx-auto px-4">
         <h3 className="text-lg font-semibold mb-3">Event map</h3>
-        <p className="text-sm text-gray-600 mb-4">Where our featured events take place.</p>
+        <p className="text-sm text-gray-600 mb-4">
+          {points.length > 0
+            ? `Showing ${points.length} event${points.length === 1 ? '' : 's'} with map locations.`
+            : 'No events with map coordinates to display. Events with a Google Maps link will appear here.'}
+        </p>
 
         <div className="h-[576px] w-full overflow-hidden rounded-xl shadow-sm" key={mapKey}>
           <EventMapInner items={items} center={center} />

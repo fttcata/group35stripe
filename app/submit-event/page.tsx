@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import PublishConfirmationModal from '../components/PublishConfirmationModal'
+import { extractCoordsFromGoogleMapsUrl } from '@/lib/extractCoords'
 
 type TicketType = {
   name: string
@@ -26,6 +27,8 @@ export default function SubmitEventPage() {
     locationUrl: '',
     image: '',
   })
+  const [extractedCoords, setExtractedCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [showLocationHelp, setShowLocationHelp] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([{ name: 'General', price: 0 }])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -33,6 +36,16 @@ export default function SubmitEventPage() {
   const [showPublishModal, setShowPublishModal] = useState(false)
   const [pendingPublish, setPendingPublish] = useState(false)
   const [publishSuccess, setPublishSuccess] = useState(false)
+
+  // Auto-extract coordinates when locationUrl changes
+  useEffect(() => {
+    if (formData.locationUrl) {
+      const coords = extractCoordsFromGoogleMapsUrl(formData.locationUrl)
+      setExtractedCoords(coords)
+    } else {
+      setExtractedCoords(null)
+    }
+  }, [formData.locationUrl])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -131,6 +144,11 @@ export default function SubmitEventPage() {
         imageUrl = publicUrl
       }
 
+      // Extract coordinates from Google Maps URL if provided
+      const coords = formData.locationUrl
+        ? extractCoordsFromGoogleMapsUrl(formData.locationUrl)
+        : null
+
       // Insert event into Supabase
       const { data: createdEvent, error: insertError } = await supabase
         .from('events')
@@ -142,6 +160,8 @@ export default function SubmitEventPage() {
           sport_category: formData.sportCategory,
           venue: formData.location,
           location_url: formData.locationUrl || null,
+          lat: coords?.lat ?? null,
+          lng: coords?.lng ?? null,
           images: imageUrl ? [imageUrl] : [],
           status: publish ? 'published' : 'draft',
         })
@@ -186,6 +206,7 @@ export default function SubmitEventPage() {
       })
       setImageFile(null)
       setTicketTypes([{ name: 'General', price: 0 }])
+      setExtractedCoords(null)
 
       // Redirect based on publish status
       if (publish) {
@@ -385,19 +406,64 @@ export default function SubmitEventPage() {
 
             {/* Location URL */}
             <div>
-              <label htmlFor="locationUrl" className="block text-sm font-semibold text-gray-900 mb-2">
-                Location URL (Google Maps link) *
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="locationUrl" className="block text-sm font-semibold text-gray-900">
+                  Google Maps Link (optional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowLocationHelp(!showLocationHelp)}
+                  className="text-xs text-purple-600 hover:text-purple-700 font-medium underline"
+                >
+                  {showLocationHelp ? 'Hide help' : 'How to get a Maps link?'}
+                </button>
+              </div>
+
+              {showLocationHelp && (
+                <div className="mb-3 rounded-lg bg-purple-50 border border-purple-200 p-4 text-sm text-purple-900 space-y-2">
+                  <p className="font-semibold">How to get a Google Maps link with coordinates:</p>
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Open <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google Maps</a> and search for your venue.</li>
+                    <li>Right-click (or long-press on mobile) on the exact location pin.</li>
+                    <li>Click the coordinates that appear at the top of the context menu — they will be copied to your clipboard.</li>
+                    <li>Alternatively, copy the URL from your browser address bar — it contains the coordinates after the <code className="bg-purple-100 px-1 rounded">@</code> sign.</li>
+                  </ol>
+                  <p className="text-purple-700">Example URL: <code className="bg-purple-100 px-1 rounded text-xs break-all">https://www.google.com/maps/place/.../@53.3498,-6.2603,15z/...</code></p>
+                  <p className="text-purple-700 font-medium">Providing this link will place a marker for your event on the map!</p>
+                </div>
+              )}
+
               <input
                 type="url"
                 id="locationUrl"
                 name="locationUrl"
                 value={formData.locationUrl}
                 onChange={handleChange}
-                placeholder="https://maps.google.com/..."
+                placeholder="https://www.google.com/maps/place/.../@53.3498,-6.2603,15z"
                 className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-                required
               />
+
+              {/* Coordinate extraction feedback */}
+              {formData.locationUrl && (
+                <div className="mt-2">
+                  {extractedCoords ? (
+                    <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <span className="text-green-500 text-lg">✓</span>
+                      <span>
+                        Coordinates detected: <strong>{extractedCoords.lat.toFixed(4)}, {extractedCoords.lng.toFixed(4)}</strong>
+                        — your event will appear on the map!
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      <span className="text-amber-500 text-lg">⚠</span>
+                      <span>
+                        Could not extract coordinates from this URL. Make sure the link is a full Google Maps URL containing coordinates (e.g. with <code className="bg-amber-100 px-1 rounded">@lat,lng</code> or <code className="bg-amber-100 px-1 rounded">?q=lat,lng</code>).
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
 
