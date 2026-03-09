@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
+type TicketInfo = {
+  name: string
+  price: number
+  quantity: number
+  sold: number
+}
+
 type EventManagement = {
   id: number
   title: string
@@ -13,6 +20,9 @@ type EventManagement = {
   venue: string
   images: string[]
   status: 'draft' | 'published'
+  tickets?: TicketInfo[]
+  totalTickets?: number
+  totalSold?: number
 }
 
 export default function MyEventsPage() {
@@ -41,7 +51,90 @@ export default function MyEventsPage() {
         return
       }
 
-      setAllEvents(data || [])
+      // Fetch ticket information for each event (non-blocking)
+      const eventsWithTickets = await Promise.all(
+        (data || []).map(async (event) => {
+          try {
+            // Try to fetch tickets with quantity field
+            const { data: tickets, error: ticketError } = await supabase
+              .from('ticket_types')
+              .select('name,price,quantity')
+              .eq('event_id', event.id)
+
+            if (ticketError) {
+              // If quantity column doesn't exist, try without it
+              const { data: ticketsAlt, error: altError } = await supabase
+                .from('ticket_types')
+                .select('name,price')
+                .eq('event_id', event.id)
+              
+              if (altError) {
+                console.warn(`Failed to fetch tickets for event ${event.id}`)
+                return event as EventManagement
+              }
+
+              // Map without quantity
+              const ticketsWithDefault: TicketInfo[] = (ticketsAlt || []).map(t => ({
+                name: t.name,
+                price: t.price,
+                quantity: 0, // Default if column doesn't exist
+                sold: 0,
+              }))
+
+              return {
+                ...event,
+                tickets: ticketsWithDefault,
+                totalTickets: 0,
+                totalSold: 0,
+              } as EventManagement
+            }
+
+            // Try to fetch sold counts (non-blocking)
+            let totalSold = 0
+            const ticketsWithSold: TicketInfo[] = []
+            
+            for (const ticket of tickets || []) {
+              let soldCount = 0
+              
+              // Try to count from tickets table
+              try {
+                const { data: soldTickets } = await supabase
+                  .from('tickets')
+                  .select('id', { count: 'exact', head: false })
+                  .eq('event_id', event.id)
+
+                soldCount = soldTickets?.length || 0
+                totalSold += soldCount
+              } catch (err) {
+                // Tickets table might not exist yet, continue without sales data
+                console.debug(`Tickets table not available for event ${event.id}`)
+              }
+
+              ticketsWithSold.push({
+                name: ticket.name,
+                price: ticket.price,
+                quantity: ticket.quantity || 0,
+                sold: soldCount,
+              })
+            }
+
+            const totalTickets = ticketsWithSold.reduce((sum, t) => sum + (t.quantity || 0), 0)
+
+            return {
+              ...event,
+              tickets: ticketsWithSold,
+              totalTickets,
+              totalSold,
+            } as EventManagement
+          } catch (err) {
+            // If any error occurs, return event without ticket data
+            console.debug(`Error loading ticket data for event ${event.id}:`, err)
+            return event as EventManagement
+          }
+        })
+      )
+
+      setAllEvents(eventsWithTickets)
     } catch (err) {
       setError('An error occurred while loading events')
       console.error(err)
@@ -226,13 +319,42 @@ export default function MyEventsPage() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600 mb-3 line-clamp-2">{event.description}</p>
-                        <div className="flex gap-4 text-sm text-gray-500">
+                        <div className="flex gap-4 text-sm text-gray-500 mb-4">
                           <span>{new Date(event.start_date).toLocaleDateString()}</span>
                           <span>•</span>
                           <span>{event.sport_category}</span>
                           <span>•</span>
                           <span>{event.venue}</span>
                         </div>
+                        
+                        {/* Ticket Stats */}
+                        {event.tickets && event.tickets.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <div className="flex flex-wrap gap-6 text-sm">
+                              {(event.totalTickets || 0) > 0 && (
+                                <div>
+                                  <span className="text-gray-500">Tickets: </span>
+                                  <span className="font-semibold text-gray-900">
+                                    {event.totalSold || 0}/{event.totalTickets}
+                                  </span>
+                                  {event.totalTickets && event.totalSold === event.totalTickets && event.totalTickets > 0 && (
+                                    <span className="ml-2 text-red-600 font-semibold">🔴 SOLD OUT</span>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Show sold out ticket types */}
+                              {event.tickets.some(t => t.sold === t.quantity && t.quantity > 0) && (
+                                <div className="text-red-600 text-xs">
+                                  {event.tickets
+                                    .filter(t => t.sold === t.quantity && t.quantity > 0)
+                                    .map(t => t.name)
+                                    .join(', ')} sold out
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
