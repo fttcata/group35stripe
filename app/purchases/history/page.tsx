@@ -23,7 +23,7 @@ interface EventInfo {
   id: string;
   title: string;
   description: string | null;
-  date: string;
+  start_date: string;
   venue: string | null;
   sport_category: string | null;
   images: string[];
@@ -107,8 +107,8 @@ async function downloadTicketPDF(purchase: Purchase) {
   doc.text(title, 105, 35, { align: 'center' });
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  if (event?.date) {
-    doc.text(`Date: ${formatDate(event.date)}  |  Time: ${formatTime(event.date)}`, 105, 43, {
+  if (event?.start_date) {
+    doc.text(`Date: ${formatDate(event.start_date)}  |  Time: ${formatTime(event.start_date)}`, 105, 43, {
       align: 'center',
     });
   }
@@ -260,8 +260,8 @@ function PurchaseCard({
             </span>
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
-            {event?.date && <span>📅 {formatDate(event.date)}</span>}
-            {event?.date && <span>🕐 {formatTime(event.date)}</span>}
+            {event?.start_date && <span>📅 {formatDate(event.start_date)}</span>}
+            {event?.start_date && <span>🕐 {formatTime(event.start_date)}</span>}
             {event?.venue && <span>📍 {event.venue}</span>}
             {event?.sport_category && (
               <span className="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full">
@@ -393,8 +393,8 @@ export default function PurchasesPage() {
   }, [user, fetchPurchases]);
 
   // Split upcoming vs past (purchases without event data go to past)
-  const upcoming = purchases.filter((p) => p.events?.date && isUpcoming(p.events.date));
-  const past = purchases.filter((p) => !p.events?.date || !isUpcoming(p.events.date));
+  const upcoming = purchases.filter((p) => p.events?.start_date && isUpcoming(p.events.start_date));
+  const past = purchases.filter((p) => !p.events?.start_date || !isUpcoming(p.events.start_date));
 
   /* ---- Not signed in ---- */
   if (!loading && !user) {
