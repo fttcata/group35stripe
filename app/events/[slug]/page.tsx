@@ -43,12 +43,12 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
       }
 
       const eventIds = (dbEvents || []).map((e) => e.id)
-      let ticketRows: Array<{ event_id: number; name: string; price: number }> = []
+      let ticketRows: Array<{ event_id: string; id: string; name: string; price: number }> = []
 
       if (eventIds.length > 0) {
         const { data: tickets, error: ticketError } = await supabase
           .from('ticket_types')
-          .select('event_id,name,price')
+          .select('event_id,id,name,price')
           .in('event_id', eventIds)
 
         if (!ticketError && tickets) {
@@ -56,9 +56,9 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
         }
       }
 
-      const ticketsByEventId = ticketRows.reduce<Record<number, { name: string; price: number }[]>>((acc, row) => {
+      const ticketsByEventId = ticketRows.reduce<Record<string, { id: string; name: string; price: number }[]>>((acc, row) => {
         if (!acc[row.event_id]) acc[row.event_id] = []
-        acc[row.event_id].push({ name: row.name, price: row.price })
+        acc[row.event_id].push({ id: row.id, name: row.name, price: row.price })
         return acc
       }, {})
 
@@ -67,6 +67,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
         const endDate = new Date(e.end_time)
         const slugBase = e.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
         return {
+          id: e.id,
           slug: `${slugBase}-${e.id}`,
           title: e.title,
           description: e.description,
@@ -129,7 +130,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
     // Store cart data in localStorage
     localStorage.setItem('cartData', JSON.stringify({
       event: {
-        id: event.slug,
+        id: event.id || event.slug || 'unknown',
         title: event.title,
         date: event.date,
       },
@@ -137,6 +138,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
       paymentOption,
       totalPrice: totals.totalPrice,
       totalTickets: totals.totalTickets,
+      ticketTypes: event.ticketTypes || [],
     }))
     
     // Redirect to checkout

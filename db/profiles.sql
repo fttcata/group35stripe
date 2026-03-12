@@ -4,9 +4,12 @@ CREATE TABLE IF NOT EXISTS profiles (
   email text NOT NULL,
   role text NOT NULL DEFAULT 'attendee' CHECK (role IN ('attendee', 'organizer')),
   full_name text,
+  stripe_account_id text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS stripe_account_id text;
 
 -- Enable Row Level Security
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

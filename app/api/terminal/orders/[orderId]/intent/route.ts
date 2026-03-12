@@ -25,7 +25,7 @@ export async function POST(
     const { orderId } = await params;
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id,total_amount,payment_status,customer_email')
+      .select('id,total_amount,payment_status,customer_email,event_id')
       .eq('id', orderId)
       .single();
 
@@ -45,6 +45,34 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid order amount' }, { status: 400 });
     }
 
+    let transferData: Stripe.PaymentIntentCreateParams.TransferData | undefined;
+    let applicationFee: number | undefined;
+
+    if (order.event_id) {
+      const { data: eventRow } = await supabase
+        .from('events')
+        .select('created_by')
+        .eq('id', order.event_id)
+        .single();
+
+      if (eventRow?.created_by) {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('stripe_account_id')
+          .eq('id', eventRow.created_by)
+          .single();
+
+        const destinationAccount = profileRow?.stripe_account_id?.trim();
+        if (destinationAccount) {
+          transferData = { destination: destinationAccount };
+          const feePercent = Number(process.env.PLATFORM_FEE_PERCENT || 0);
+          applicationFee = feePercent > 0
+            ? Math.round(amountCents * (feePercent / 100))
+            : undefined;
+        }
+      }
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: terminalCurrency,
@@ -54,6 +82,8 @@ export async function POST(
         order_id: orderId,
       },
       receipt_email: order.customer_email || undefined,
+      ...(transferData ? { transfer_data: transferData } : {}),
+      ...(applicationFee ? { application_fee_amount: applicationFee } : {}),
     });
 
     return NextResponse.json({

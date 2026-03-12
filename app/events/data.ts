@@ -1,9 +1,12 @@
 export type TicketType = {
+  id?: string
   name: string
   price: number
+  quantity?: number
 }
 
 export type Event = {
+  id?: string
   slug?: string
   title: string
   description: string
