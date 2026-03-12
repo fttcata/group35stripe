@@ -23,7 +23,9 @@ export default function SubmitEventPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const eventId = searchParams.get('id')
-  
+  const supabase = createSupabaseBrowserClient()
+  const [userId, setUserId] = useState<string | null>(null)
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -49,6 +51,15 @@ export default function SubmitEventPage() {
   const [dateWarning, setDateWarning] = useState('')
   const [venueWarning, setVenueWarning] = useState('')
   const isEditing = !!eventId
+
+  // Fetch current user
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUserId(user?.id ?? null)
+    }
+    fetchUser()
+  }, [supabase])
 
   // Load event data for editing
   useEffect(() => {
@@ -81,7 +92,6 @@ export default function SubmitEventPage() {
 
   const loadEventForEdit = async () => {
     try {
-      const supabase = createSupabaseBrowserClient()
 
       // Fetch event data
       const { data: event, error: eventError } = await supabase
@@ -277,9 +287,6 @@ export default function SubmitEventPage() {
       const eventDateTime = new Date(`${formData.date}T${formData.startTime}`)
       const endDateTime = new Date(`${formData.date}T${formData.endTime}`)
 
-      // Initialize Supabase client
-      const supabase = createSupabaseBrowserClient()
-
       let imageUrl = originalEventData?.image || ''
 
       // Upload image if new file provided
@@ -396,6 +403,7 @@ export default function SubmitEventPage() {
             lng: coords?.lng ?? null,
             images: imageUrl ? [imageUrl] : [],
             status: publish ? 'published' : 'draft',
+            created_by: userId,
           })
           .select('id')
           .single()

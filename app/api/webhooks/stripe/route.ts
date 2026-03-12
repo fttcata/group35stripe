@@ -68,12 +68,26 @@ async function handleCheckoutSessionCompleted(
       throw new Error(`Failed to find existing order: ${existingOrderError.message}`);
     }
 
+    // Try to resolve user_id from customer email
+    let resolvedUserId: string | null = null;
+    if (customerEmail) {
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', customerEmail)
+        .limit(1);
+      if (profileRows && profileRows.length > 0) {
+        resolvedUserId = profileRows[0].id;
+      }
+    }
+
     let orderData: { id: string } | null = null;
     if (existingOrder?.id) {
       const { data: updatedOrder, error: updateError } = await supabase
         .from('orders')
         .update({
           event_id: eventIdForDb,
+          user_id: resolvedUserId,
           customer_email: customerEmail,
           payment_method: 'stripe',
           total_amount: (session.amount_total || 0) / 100,
@@ -94,6 +108,7 @@ async function handleCheckoutSessionCompleted(
           {
             stripe_session_id: session.id,
             event_id: eventIdForDb,
+            user_id: resolvedUserId,
             customer_email: customerEmail,
             payment_method: 'stripe',
             total_amount: (session.amount_total || 0) / 100,
@@ -117,6 +132,26 @@ async function handleCheckoutSessionCompleted(
     if (tickets.length === 0) {
       tickets = await createTickets(orderId, eventName, 'Standard', quantity);
       console.log(`Created ${tickets.length} tickets for order ${orderId}`);
+
+      // Decrement quantity_available for the ticket types
+      if (eventIdForDb) {
+        const { data: ticketTypes } = await supabase
+          .from('ticket_types')
+          .select('id, quantity_available')
+          .eq('event_id', eventIdForDb)
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        if (ticketTypes && ticketTypes.length > 0) {
+          const tt = ticketTypes[0];
+          const newQty = Math.max(0, (tt.quantity_available || 0) - quantity);
+          await supabase
+            .from('ticket_types')
+            .update({ quantity_available: newQty })
+            .eq('id', tt.id);
+          console.log(`Decremented ticket_type ${tt.id} quantity_available to ${newQty}`);
+        }
+      }
     } else {
       console.log(`Reusing ${tickets.length} existing tickets for order ${orderId}`);
     }

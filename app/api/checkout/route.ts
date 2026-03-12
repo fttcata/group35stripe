@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { supabase } from '../../../lib/supabaseClient';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 // Check if Stripe is configured
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -102,12 +103,23 @@ export async function POST(req: NextRequest) {
 
     // Store pending order in database with session ID
     if (supabase) {
+      // Try to get the authenticated user's ID
+      let userId: string | null = null;
+      try {
+        const authSupabase = await createSupabaseServerClient();
+        const { data: { user } } = await authSupabase.auth.getUser();
+        userId = user?.id ?? null;
+      } catch {
+        // Not authenticated - that's fine for guest checkout
+      }
+
       const { error } = await supabase
         .from('orders')
         .insert([
           {
             stripe_session_id: session.id,
             event_id: eventIdForDb,
+            user_id: userId,
             customer_email: guestEmail || customerEmail || null,
             payment_method: paymentMethod,
             total_amount: totalPrice / 100,

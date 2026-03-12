@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS events (
   lat double precision,
   lng double precision,
   status text NOT NULL DEFAULT 'draft',
+  created_by uuid,
   created_at timestamptz DEFAULT now()
 );
 
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS events (
 -- ALTER TABLE events ADD COLUMN IF NOT EXISTS lat double precision;
 -- ALTER TABLE events ADD COLUMN IF NOT EXISTS lng double precision;
 -- ALTER TABLE events ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'draft';
+-- ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by uuid;
 
 CREATE TABLE IF NOT EXISTS ticket_types (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
