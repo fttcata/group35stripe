@@ -36,6 +36,7 @@ function parseLocalDate(dateStr: string) {
 export default function EventsPage() {
   const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
   const [loading, setLoading] = useState(true)
+  const [role, setRole] = useState<string | null>(null)
 
   // Filter state
   const [search, setSearch] = useState('')
@@ -44,6 +45,14 @@ export default function EventsPage() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [selectedLocation, setSelectedLocation] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
+
+  // Fetch current user role
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    supabase.auth.getUser().then(({ data }) => {
+      setRole(data.user?.user_metadata?.role ?? null)
+    })
+  }, [])
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -187,29 +196,31 @@ export default function EventsPage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
-      {/* Top Navigation */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
-          <Link
-            href="/my-events"
-            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
-          >
-            My Events
-          </Link>
-          <Link
-            href="/drafts"
-            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
-          >
-            Drafts
-          </Link>
-          <Link
-            href="/submit-event"
-            className="text-sm bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-purple-700"
-          >
-            + Create Event
-          </Link>
+      {/* Top Navigation – organizer-only links */}
+      {role === 'organizer' && (
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
+            <Link
+              href="/my-events"
+              className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+            >
+              My Events
+            </Link>
+            <Link
+              href="/drafts"
+              className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+            >
+              Drafts
+            </Link>
+            <Link
+              href="/submit-event"
+              className="text-sm bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-purple-700"
+            >
+              + Create Event
+            </Link>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-700 text-white">
