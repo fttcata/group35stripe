@@ -42,6 +42,13 @@ export default function DraftsPage() {
         return
       }
 
+      // Check organizer role
+      const role = user.user_metadata?.role
+      if (role !== 'organizer') {
+        router.push('/')
+        return
+      }
+
       const { data, error: dbError } = await supabase
         .from('events')
         .select('id,title,description,start_date,sport_category,venue,images')

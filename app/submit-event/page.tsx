@@ -52,14 +52,23 @@ export default function SubmitEventPage() {
   const [venueWarning, setVenueWarning] = useState('')
   const isEditing = !!eventId
 
-  // Fetch current user
+  // Fetch current user and verify organizer role
   useEffect(() => {
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      setUserId(user?.id ?? null)
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      const role = user.user_metadata?.role
+      if (role !== 'organizer') {
+        router.push('/')
+        return
+      }
+      setUserId(user.id)
     }
     fetchUser()
-  }, [supabase])
+  }, [supabase, router])
 
   // Load event data for editing
   useEffect(() => {

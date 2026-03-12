@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type TicketInfo = {
@@ -26,6 +27,7 @@ type EventManagement = {
 }
 
 export default function MyEventsPage() {
+  const router = useRouter()
   const [allEvents, setAllEvents] = useState<EventManagement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -45,6 +47,13 @@ export default function MyEventsPage() {
       if (!user) {
         setError('Please sign in to view your events')
         setLoading(false)
+        return
+      }
+
+      // Check organizer role
+      const role = user.user_metadata?.role
+      if (role !== 'organizer') {
+        router.push('/')
         return
       }
 

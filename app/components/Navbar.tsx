@@ -95,6 +95,26 @@ export default function Navbar() {
 
                   {role === 'organizer' && (
                     <Link
+                      href="/my-events"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      My Events
+                    </Link>
+                  )}
+
+                  {role === 'organizer' && (
+                    <Link
+                      href="/drafts"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Drafts
+                    </Link>
+                  )}
+
+                  {role === 'organizer' && (
+                    <Link
                       href="/submit-event"
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
