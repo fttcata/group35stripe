@@ -7,7 +7,7 @@ export default function Hero() {
       <div className="max-w-4xl mx-auto px-4 py-16 sm:py-24">
         <div className="flex items-start gap-6">
           <div className="flex-shrink-0">
-            <Image src="/eventify-logo.png" alt="Eventify" width={96} height={96} className="rounded-md bg-white/5 object-contain" />
+            <Image src="/logo.jpg" alt="Eventify" width={96} height={96} className="rounded-md bg-white/5 object-contain" />
           </div>
 
           <div className="max-w-xl">

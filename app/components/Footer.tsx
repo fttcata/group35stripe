@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="max-w-4xl mx-auto px-4 py-8 text-sm text-gray-600">
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div className="flex items-center gap-4">
-            <Image src="/eventify-logo.png" alt="Eventify" width={96} height={32} className="object-contain" />
+            <Image src="/logo.jpg" alt="Eventify" width={96} height={32} className="object-contain" />
             <span className="text-xs text-gray-500">— Discover local events</span>
           </div>
 

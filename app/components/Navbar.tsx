@@ -55,7 +55,7 @@ export default function Navbar() {
       <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/eventify-logo.png" alt="Eventify" width={32} height={32} className="rounded" />
+          <Image src="/logo.jpg" alt="Eventify" width={32} height={32} className="rounded" />
           <span className="font-bold text-lg text-gray-900">Eventify</span>
         </Link>
 
