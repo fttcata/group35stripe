@@ -201,6 +201,12 @@ export default function EventsPage() {
         <div className="bg-white border-b border-gray-200">
           <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
             <Link
+              href="/dashboard"
+              className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
+            >
+              Dashboard
+            </Link>
+            <Link
               href="/my-events"
               className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
             >
@@ -485,8 +491,8 @@ export default function EventsPage() {
                 </div>
                 <div className="flex flex-col gap-6">
                   {items.map((e, cardIdx) => (
-                    <div 
-                      key={e.title}
+                    <div
+                      key={e.slug}
                       className="animate-fade-in-up w-full"
                       style={{ animationDelay: `${(idx * 100) + (cardIdx * 50)}ms` }}
                     >
