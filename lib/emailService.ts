@@ -212,6 +212,11 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
                   <h3 style="margin: 0; color: #333;">Ticket ${index + 1}</h3>
                   <span style="background-color: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px;">${ticket.ticket_type}</span>
                 </div>
+                <div style="background-color: #f0f4ff; border: 2px dashed #667eea; border-radius: 8px; padding: 16px; text-align: center; margin-bottom: 15px;">
+                  <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px;">Check-In Code</p>
+                  <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; color: #667eea; letter-spacing: 6px;">${ticket.check_in_code || ''}</p>
+                  <p style="margin: 4px 0 0 0; font-size: 11px; color: #9ca3af;">Show this code at the venue for check-in</p>
+                </div>
                 <div class="ticket-code">
                   ${ticket.ticket_code}
                 </div>

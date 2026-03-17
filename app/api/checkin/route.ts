@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendPaymentReminderEmail } from '../../../lib/emailService';
+import { createTickets } from '../../../lib/ticketService';
+import { sendTicketConfirmationEmail } from '../../../lib/emailService';
 import { supabase } from '../../../lib/supabaseClient';
 
 interface CheckInRequest {
@@ -71,13 +72,17 @@ export async function POST(req: NextRequest) {
       console.warn('Failed to create order_items row for check-in order:', orderItemError);
     }
 
-    const emailResult = await sendPaymentReminderEmail(
-      email,
-      eventTitle,
-      eventDate,
-      amount,
-      orderId
-    );
+    const tickets = await createTickets(orderId, eventTitle, 'General Admission', quantity);
+
+    const emailResult = await sendTicketConfirmationEmail({
+      customer_email: email,
+      event_title: eventTitle,
+      event_date: eventDate,
+      tickets,
+      total_amount: amount,
+      payment_method: 'pay-on-day',
+      order_id: orderId,
+    });
 
     if (!emailResult.success) {
       return NextResponse.json(

@@ -1,13 +1,35 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '../../../lib/supabaseClient';
 
+function generateCheckInCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function backfillTicketCodes(tickets: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> {
+  if (!supabase) return tickets;
+  const result = [...tickets];
+  for (let i = 0; i < result.length; i++) {
+    if (!result[i].check_in_code) {
+      const code = generateCheckInCode();
+      const { error } = await supabase
+        .from('tickets')
+        .update({ check_in_code: code })
+        .eq('id', result[i].id);
+      if (!error) {
+        result[i] = { ...result[i], check_in_code: code };
+      }
+    }
+  }
+  return result;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { email, orderId } = await req.json();
+    const { email, orderId, checkInCode } = await req.json();
 
-    if (!email && !orderId) {
+    if (!email && !orderId && !checkInCode) {
       return NextResponse.json(
-        { error: 'Email or order ID is required' },
+        { error: 'Email, order ID, or check-in code is required' },
         { status: 400 }
       );
     }
@@ -28,14 +50,36 @@ export async function POST(req: NextRequest) {
       tickets (
         id,
         ticket_code,
+        check_in_code,
         ticket_type,
         qr_code_data,
         is_used
       )
     `);
 
-    // Filter by email or order ID
-    if (orderId) {
+    // If looking up by check-in code, find the ticket first then get its order
+    if (checkInCode) {
+      const code = String(checkInCode).trim();
+      if (!/^\d{6}$/.test(code)) {
+        return NextResponse.json(
+          { error: 'Check-in code must be a 6-digit number' },
+          { status: 400 }
+        );
+      }
+      const { data: ticket, error: ticketError } = await supabase
+        .from('tickets')
+        .select('order_id')
+        .eq('check_in_code', code)
+        .single();
+
+      if (ticketError || !ticket) {
+        return NextResponse.json(
+          { tickets: [], event: null, message: 'No ticket found for this check-in code' },
+          { status: 404 }
+        );
+      }
+      query = query.eq('id', ticket.order_id);
+    } else if (orderId) {
       query = query.eq('id', orderId);
     } else if (email) {
       query = query.eq('customer_email', email);
@@ -64,7 +108,8 @@ export async function POST(req: NextRequest) {
 
     // Return first matching order with all its tickets
     const order = data[0];
-    const tickets = ((order as Record<string, unknown>).tickets as Array<unknown>) || [];
+    const rawTickets = ((order as Record<string, unknown>).tickets as Array<Record<string, unknown>>) || [];
+    const tickets = await backfillTicketCodes(rawTickets);
 
     let event: Record<string, unknown> | null = null;
     if (order.event_id) {
@@ -107,8 +152,9 @@ export async function GET(req: NextRequest) {
   // Support GET requests for accessibility
   const email = req.nextUrl.searchParams.get('email');
   const orderId = req.nextUrl.searchParams.get('orderId');
+  const checkInCode = req.nextUrl.searchParams.get('checkInCode');
 
-  const body = JSON.stringify({ email, orderId });
+  const body = JSON.stringify({ email, orderId, checkInCode });
 
   return POST(
     new NextRequest(req.nextUrl, {
