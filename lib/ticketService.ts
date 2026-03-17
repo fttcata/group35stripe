@@ -4,7 +4,6 @@ import { supabase } from './supabaseClient';
 export interface Ticket {
   id: string;
   ticket_code: string;
-  check_in_code: string;
   qr_code_data: string;
   ticket_type: string;
   is_used: boolean;
@@ -18,14 +17,6 @@ function generateTicketCode(): string {
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `TICKET-${timestamp}-${randomPart}`;
-}
-
-/**
- * Generates a unique 6-digit numeric check-in code for terminal entry
- */
-function generateCheckInCode(): string {
-  // 6 digits, zero-padded (100000–999999)
-  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 /**
@@ -62,13 +53,11 @@ export async function createTickets(
 
   for (let i = 0; i < quantity; i++) {
     const ticketCode = generateTicketCode();
-    const checkInCode = generateCheckInCode();
     const qrCodeData = await generateQRCode(ticketCode, eventTitle);
 
     tickets.push({
       id: crypto.randomUUID(),
       ticket_code: ticketCode,
-      check_in_code: checkInCode,
       qr_code_data: qrCodeData,
       ticket_type: ticketType,
       is_used: false,
@@ -140,7 +129,7 @@ export async function getTicketsByOrderId(orderId: string): Promise<Ticket[]> {
     throw new Error('Failed to retrieve tickets');
   }
 
-  return backfillCheckInCodes(data || []);
+  return data || [];
 }
 
 /**

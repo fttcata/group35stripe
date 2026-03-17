@@ -5,7 +5,6 @@ import Link from 'next/link';
 
 interface TicketInfo {
   ticket_code: string;
-  check_in_code?: string;
   ticket_type: string;
   qr_code_data: string;
 }
@@ -149,16 +148,6 @@ export default function MyTicketsPage() {
                         {ticket.ticket_type}
                       </span>
                     </div>
-
-                    {ticket.check_in_code && (
-                      <div className="mb-4 p-4 bg-indigo-50 rounded-lg border-2 border-dashed border-indigo-400 text-center">
-                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Check-In Code</p>
-                        <p className="font-mono text-3xl font-bold text-indigo-600 tracking-[0.3em]">
-                          {ticket.check_in_code}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">Show this code at the venue for check-in</p>
-                      </div>
-                    )}
 
                     <div className="mb-4 p-3 bg-white rounded border border-gray-200">
                       <p className="text-xs text-gray-600 mb-1">Ticket Code</p>
