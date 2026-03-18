@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabase } from '../../../../../../lib/supabaseClient';
+import { canUserScanEvent, getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
@@ -11,6 +12,11 @@ export async function POST(
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!stripe) {
       return NextResponse.json(
         { error: 'STRIPE_SECRET_KEY is not configured' },
@@ -25,12 +31,17 @@ export async function POST(
     const { orderId } = await params;
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id,total_amount,payment_status,customer_email')
+      .select('id,event_id,total_amount,payment_status,customer_email')
       .eq('id', orderId)
       .single();
 
     if (orderError || !order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    const allowed = await canUserScanEvent(order.event_id, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
     }
 
     if (order.payment_status === 'completed') {

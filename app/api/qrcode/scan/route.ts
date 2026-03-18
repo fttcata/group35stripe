@@ -1,9 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '../../../../lib/supabaseClient';
+import { canUserScanEvent, getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 export async function POST(req: NextRequest) {
   try {
-    const { ticketCode } = await req.json();
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { ticketCode, eventTitleHint } = await req.json();
 
     if (!ticketCode || typeof ticketCode !== 'string') {
       return NextResponse.json(
@@ -58,13 +64,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let resolvedEventId: string | null = order.event_id ?? null;
+
+    if (!resolvedEventId && eventTitleHint && typeof eventTitleHint === 'string') {
+      const hint = eventTitleHint.trim();
+      if (hint) {
+        const { data: hintedEvent } = await supabase
+          .from('events')
+          .select('id')
+          .eq('title', hint)
+          .limit(1)
+          .maybeSingle();
+
+        if (hintedEvent?.id) {
+          resolvedEventId = hintedEvent.id;
+
+          // Backfill legacy/malformed orders so future scans authorize cleanly.
+          await supabase
+            .from('orders')
+            .update({ event_id: hintedEvent.id })
+            .eq('id', order.id);
+        }
+      }
+    }
+
+    const allowed = await canUserScanEvent(resolvedEventId, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
     // Get event title
     let eventTitle = 'Event';
-    if (order.event_id) {
+    if (resolvedEventId) {
       const { data: event } = await supabase
         .from('events')
         .select('title')
-        .eq('id', order.event_id)
+        .eq('id', resolvedEventId)
         .single();
 
       if (event) eventTitle = event.title;

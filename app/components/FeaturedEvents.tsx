@@ -18,7 +18,7 @@ export default function FeaturedEvents() {
           const json = await res.json()
           if (json.events && json.events.length > 0) {
             const mapped: Event[] = json.events.map((ev: Record<string, unknown>) => ({
-              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
+              slug: `${(ev.title as string).toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')}-${String(ev.id || '')}`,
               title: ev.title as string,
               description: (ev.description as string) || '',
               date: (ev.date as string).slice(0, 10),

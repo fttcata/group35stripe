@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { loadStripeTerminal } from '@stripe/terminal-js';
 import type { Reader, Terminal } from '@stripe/terminal-js';
 import Link from 'next/link';
@@ -29,7 +29,6 @@ export default function StaffScanPage() {
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [connectedReader, setConnectedReader] = useState<Reader | null>(null);
   const [discoveredReaders, setDiscoveredReaders] = useState<Reader[]>([]);
-  const [simulated, setSimulated] = useState(true);
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [discoveringReaders, setDiscoveringReaders] = useState(false);
   const [connectingReader, setConnectingReader] = useState(false);
@@ -39,6 +38,8 @@ export default function StaffScanPage() {
   const [scannedData, setScannedData] = useState<ScannedTicket | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [staffAccessLoading, setStaffAccessLoading] = useState(true);
+  const [hasStaffAccess, setHasStaffAccess] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [manualTicketCode, setManualTicketCode] = useState('');
@@ -90,7 +91,27 @@ export default function StaffScanPage() {
     };
   }, []);
 
-  async function discoverReaders() {
+  useEffect(() => {
+    const loadStaffAccess = async () => {
+      try {
+        const response = await fetch('/api/staff/my-events');
+        if (!response.ok) {
+          setHasStaffAccess(false);
+          return;
+        }
+        const data = await response.json();
+        setHasStaffAccess(Array.isArray(data.events) && data.events.length > 0);
+      } catch {
+        setHasStaffAccess(false);
+      } finally {
+        setStaffAccessLoading(false);
+      }
+    };
+
+    loadStaffAccess();
+  }, []);
+
+  const discoverReaders = useCallback(async () => {
     if (!terminal) {
       setTerminalError('Terminal is not initialized yet.');
       return;
@@ -99,7 +120,7 @@ export default function StaffScanPage() {
     setDiscoveringReaders(true);
     try {
       setTerminalError(null);
-      const result = await terminal.discoverReaders({ simulated });
+      const result = await terminal.discoverReaders({ simulated: false });
       if ('error' in result) throw new Error(result.error.message);
       setDiscoveredReaders(result.discoveredReaders || []);
     } catch (err) {
@@ -107,7 +128,22 @@ export default function StaffScanPage() {
     } finally {
       setDiscoveringReaders(false);
     }
-  }
+  }, [terminal]);
+
+  useEffect(() => {
+    if (!terminal || connectedReader) return;
+
+    discoverReaders();
+    const intervalId = window.setInterval(() => {
+      if (!connectedReader) {
+        discoverReaders();
+      }
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [terminal, connectedReader, discoverReaders]);
 
   async function connectReader(reader: Reader) {
     if (!terminal) {
@@ -389,6 +425,7 @@ export default function StaffScanPage() {
       // QR contains format: TICKET-YYYYMMDD-XXXXXX|Event Title|timestamp
       const parts = qrData.split('|');
       const ticketCode = parts[0];
+      const eventTitleHint = parts[1]?.trim() || undefined;
 
       if (!ticketCode || !ticketCode.startsWith('TICKET-')) {
         throw new Error('Invalid QR code format');
@@ -397,7 +434,7 @@ export default function StaffScanPage() {
       const response = await fetch('/api/qrcode/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketCode }),
+        body: JSON.stringify({ ticketCode, eventTitleHint }),
       });
 
       const data = await response.json();
@@ -520,53 +557,82 @@ export default function StaffScanPage() {
     await handleQRScanned(code);
   };
 
+  if (staffAccessLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 grid place-items-center px-4">
+        <p className="text-slate-300">Checking staff access...</p>
+      </div>
+    );
+  }
+
+  if (!hasStaffAccess) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 grid place-items-center px-4">
+        <div className="max-w-lg w-full rounded-2xl border border-slate-700 bg-slate-900 p-6">
+          <h1 className="text-2xl font-black">Staff access required</h1>
+          <p className="mt-2 text-slate-300">
+            Your account is not activated for event staff scanning yet. Enter your staff invite code in Account to unlock scanner access.
+          </p>
+          <div className="mt-4 flex gap-3">
+            <Link href="/account" className="rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2">
+              Go to Account
+            </Link>
+            <Link href="/" className="rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold px-4 py-2">
+              Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 antialiased text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur p-4">
+    <div className="min-h-screen bg-slate-950 antialiased text-slate-100 relative overflow-x-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-32 -left-28 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute top-1/3 -right-20 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+      </div>
+
+      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl p-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Staff Mobile</p>
-            <h1 className="text-2xl font-black">Rapid Ticket Scan</h1>
+            <h1 className="text-2xl font-black bg-linear-to-r from-cyan-200 via-white to-emerald-200 bg-clip-text text-transparent">
+              Rapid Ticket Scan
+            </h1>
           </div>
-          <Link href="/staff" className="text-cyan-300 hover:text-cyan-200 font-semibold text-sm">
+          <Link href="/staff" className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-cyan-200 hover:text-cyan-100 hover:bg-cyan-400/20 font-semibold text-sm transition-colors">
             Main Staff Console
           </Link>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <section className="mb-5 rounded-2xl border border-slate-700 bg-slate-900 p-4">
+      <main className="relative z-10 max-w-4xl mx-auto px-4 py-8">
+        <section className="mb-5 rounded-2xl border border-slate-700/80 bg-slate-900/80 backdrop-blur p-4 shadow-[0_14px_40px_rgba(0,0,0,0.35)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-200">1) Connect Reader Once</p>
+              <p className="text-sm font-semibold text-slate-200">Reader Status</p>
               <p className="text-xs text-slate-400 mt-1">
-                Wireless reader stays connected while you scan and process each ticket.
+                Scanner auto-discovers your Stripe reader and keeps it connected while you process guests.
               </p>
             </div>
-            <span className={`text-xs font-bold px-3 py-1 rounded-full ${connectedReader ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-600/20 text-amber-300 border border-amber-500/40'}`}>
+            <span className={`text-xs font-bold px-3 py-1 rounded-full ${connectedReader ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_16px_rgba(16,185,129,0.25)]' : 'bg-amber-600/20 text-amber-300 border border-amber-500/40 animate-pulse'}`}>
               {connectedReader ? `Connected: ${connectedReader.label}` : 'Not connected'}
             </span>
           </div>
 
           {!connectedReader && (
             <div className="mt-4 space-y-3">
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={simulated}
-                  onChange={(e) => setSimulated(e.target.checked)}
-                  disabled={discoveringReaders || connectingReader}
-                  className="rounded"
-                />
-                Use simulated reader (test mode)
-              </label>
+              <p className="text-sm text-slate-300">
+                Looking for real Stripe readers on this network.
+              </p>
 
               <button
                 onClick={discoverReaders}
                 disabled={discoveringReaders || connectingReader}
-                className="w-full rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-400 text-slate-950 font-bold py-3"
+                className="w-full rounded-xl bg-linear-to-r from-cyan-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-400 text-slate-950 font-bold py-3 transition-all"
               >
-                {discoveringReaders ? 'Discovering readers...' : 'Discover Readers'}
+                {discoveringReaders ? 'Discovering readers...' : 'Refresh Reader Search'}
               </button>
 
               {discoveredReaders.length > 0 && (
@@ -576,7 +642,7 @@ export default function StaffScanPage() {
                       key={reader.id}
                       onClick={() => connectReader(reader)}
                       disabled={connectingReader}
-                      className="w-full text-left rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-4 py-3 font-semibold"
+                      className="w-full text-left rounded-xl border border-slate-700 bg-slate-800/90 hover:bg-slate-700 px-4 py-3 font-semibold transition-colors"
                     >
                       {connectingReader ? 'Connecting...' : `Connect ${reader.label}`}
                     </button>
@@ -593,7 +659,7 @@ export default function StaffScanPage() {
 
         {/* Camera Feed */}
         <div className="mb-6">
-          <div className="relative bg-black rounded-2xl overflow-hidden mb-4 border border-slate-700 min-h-85">
+          <div className="relative bg-black rounded-2xl overflow-hidden mb-4 border border-cyan-500/30 min-h-85 shadow-[0_20px_60px_rgba(8,145,178,0.2)]">
             <video
               ref={videoRef}
               autoPlay
@@ -604,15 +670,16 @@ export default function StaffScanPage() {
               className="w-full h-[66vh] max-h-160 object-cover"
             />
             <canvas ref={canvasRef} hidden width="300" height="300" />
-            <div className="absolute inset-0 border-4 border-cyan-400 m-10 rounded-xl pointer-events-none">
-              <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-cyan-500/20" />
+            <div className="absolute inset-0 border-[3px] border-cyan-300/80 m-10 rounded-xl pointer-events-none">
+              <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-cyan-400/20" />
+              <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-cyan-300/70 animate-pulse" />
             </div>
 
             {!cameraActive && (
               <div className="absolute inset-0 grid place-items-center bg-slate-950/70 p-4">
                 <button
                   onClick={startCamera}
-                  className="w-full max-w-sm rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-5 px-6 text-xl"
+                  className="w-full max-w-sm rounded-2xl bg-linear-to-r from-emerald-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 text-slate-950 font-black py-5 px-6 text-xl transition-all"
                 >
                   Start Camera and Scan
                 </button>
@@ -624,7 +691,7 @@ export default function StaffScanPage() {
                 <p className="text-slate-200 text-sm font-semibold mb-3">Starting live camera feed...</p>
                 <button
                   onClick={startPreviewPlayback}
-                  className="rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4"
+                  className="rounded-xl bg-linear-to-r from-cyan-400 to-cyan-300 hover:from-cyan-300 hover:to-cyan-200 text-slate-950 font-bold py-2 px-4"
                 >
                   Start Live Feed
                 </button>
@@ -645,7 +712,7 @@ export default function StaffScanPage() {
           {cameraActive && (
             <button
               onClick={stopCamera}
-              className="w-full rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-4"
+              className="w-full rounded-xl bg-linear-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white font-bold py-3 px-4 transition-all"
             >
               Stop Camera
             </button>
@@ -657,7 +724,7 @@ export default function StaffScanPage() {
             </div>
           )}
 
-          <div className="mt-4 bg-slate-900 border border-slate-700 rounded-xl p-4">
+          <div className="mt-4 bg-slate-900/85 border border-slate-700 rounded-xl p-4 backdrop-blur">
             <p className="text-sm text-slate-300 mb-2">Manual code entry</p>
             <div className="flex gap-2">
               <input
@@ -671,7 +738,7 @@ export default function StaffScanPage() {
               <button
                 onClick={submitManualCode}
                 disabled={loading}
-                className="bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-bold py-2 px-4 rounded"
+                className="bg-linear-to-r from-cyan-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-slate-950 font-bold py-2 px-4 rounded"
               >
                 Submit
               </button>
@@ -688,8 +755,8 @@ export default function StaffScanPage() {
 
         {/* Scanned Ticket Details */}
         {scannedData && (
-          <div ref={resultRef} className="rounded-2xl border border-slate-700 bg-slate-900 p-6 sm:p-8">
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-3">2) Resolve Ticket</p>
+          <div ref={resultRef} className="rounded-2xl border border-slate-700/80 bg-slate-900/90 backdrop-blur p-6 sm:p-8 shadow-[0_18px_48px_rgba(0,0,0,0.38)]">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-3">Resolve Ticket</p>
             <div className="mb-6">
               <h2 className="text-3xl font-black mb-2">
                 {scannedData.customerName || 'Customer'}
@@ -738,7 +805,7 @@ export default function StaffScanPage() {
                 <button
                   onClick={handleCheckIn}
                   disabled={loading}
-                  className="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black py-4 px-4 text-lg"
+                  className="w-full rounded-xl bg-linear-to-r from-emerald-400 to-emerald-300 hover:from-emerald-300 hover:to-emerald-200 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-slate-950 font-black py-4 px-4 text-lg transition-all"
                 >
                   {loading ? 'Processing...' : 'Check In and Scan Next'}
                 </button>
@@ -748,7 +815,7 @@ export default function StaffScanPage() {
                 <button
                   onClick={handleCollectPaymentAndCheckIn}
                   disabled={processingPayment || loading || !connectedReader}
-                  className="w-full rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black py-4 px-4 text-lg"
+                  className="w-full rounded-xl bg-linear-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-slate-950 font-black py-4 px-4 text-lg transition-all"
                 >
                   {processingPayment ? 'Collecting payment...' : 'Collect on Terminal and Check In'}
                 </button>
@@ -757,7 +824,7 @@ export default function StaffScanPage() {
               <button
                 onClick={resetScan}
                 disabled={loading || processingPayment}
-                className="w-full rounded-xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-100 font-bold py-4 px-4 text-lg"
+                className="w-full rounded-xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-100 font-bold py-4 px-4 text-lg transition-colors"
               >
                 Scan Next
               </button>

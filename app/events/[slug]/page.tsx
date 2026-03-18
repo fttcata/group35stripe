@@ -14,6 +14,10 @@ type Props = {
   }>
 }
 
+type EventView = Event & {
+  eventId?: string
+}
+
 function formatDate(d: string) {
   try {
     return new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
@@ -24,7 +28,7 @@ function formatDate(d: string) {
 
 export default function EventDetailsPage({ params: paramsPromise }: Props) {
   const params = use(paramsPromise)
-  const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
+  const [allEvents, setAllEvents] = useState<EventView[]>(eventsData)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     const loadEvents = async () => {
@@ -62,11 +66,12 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
         return acc
       }, {})
 
-      const mappedEvents: Event[] = (dbEvents || []).map((e) => {
+      const mappedEvents: EventView[] = (dbEvents || []).map((e) => {
         const startDate = new Date(e.start_date)
         const endDate = new Date(e.end_time)
         const slugBase = e.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
         return {
+          eventId: e.id,
           slug: `${slugBase}-${e.id}`,
           title: e.title,
           description: e.description,
@@ -129,7 +134,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
     // Store cart data in localStorage
     localStorage.setItem('cartData', JSON.stringify({
       event: {
-        id: event.slug,
+        id: event.eventId || event.slug,
         title: event.title,
         date: event.date,
       },
@@ -145,7 +150,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
         <div className="text-gray-600">Loading event...</div>
       </main>
     )
@@ -153,7 +158,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
 
   if (!event) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
+      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
         <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
           <div className="text-6xl mb-4">✅</div>
           <h1 className="text-2xl font-bold text-green-600">Event Successfully Submitted!</h1>
@@ -167,7 +172,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
       <div className="max-w-6xl mx-auto px-4 py-10">
         <Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">← Back to Events</Link>
 

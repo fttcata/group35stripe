@@ -364,3 +364,53 @@ export async function sendPaymentReminderEmail(
     };
   }
 }
+
+export async function sendStaffInviteEmail(params: {
+  email: string;
+  eventTitle: string;
+  inviteCode: string;
+  inviterName?: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
+    const inviter = params.inviterName ? `${params.inviterName} ` : 'An event organizer ';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <body style="font-family: Arial, sans-serif; color: #1f2937;">
+        <div style="max-width: 640px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+          <div style="background: #0f172a; color: #f8fafc; padding: 20px;">
+            <h2 style="margin: 0;">You were invited as event staff</h2>
+          </div>
+          <div style="padding: 20px; background: #ffffff;">
+            <p style="margin-top: 0;">${inviter}invited you to work staff check-in for:</p>
+            <p style="font-size: 18px; font-weight: 700; margin: 10px 0 20px 0;">${params.eventTitle}</p>
+            <p>Use this activation code in your account page:</p>
+            <div style="font-size: 28px; letter-spacing: 4px; font-weight: 800; color: #0f172a; margin: 10px 0 16px 0;">${params.inviteCode}</div>
+            <p style="margin-bottom: 0; color: #475569;">After activation, your account can access scanner features for this event only.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const result = await transporter.sendMail({
+      from: fromEmail,
+      to: params.email,
+      subject: `Staff invite for ${params.eventTitle}`,
+      html,
+      replyTo: replyToEmail,
+    });
+
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('Failed to send staff invite email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}

@@ -279,6 +279,8 @@ export default function SubmitEventPage() {
 
       // Initialize Supabase client
       const supabase = createSupabaseBrowserClient()
+      const { data: authData } = await supabase.auth.getUser()
+      const currentUserId = authData.user?.id || null
 
       let imageUrl = originalEventData?.image || ''
 
@@ -385,6 +387,7 @@ export default function SubmitEventPage() {
         const { data: createdEvent, error: insertError } = await supabase
           .from('events')
           .insert({
+            created_by: currentUserId,
             title: formData.title,
             description: formData.description,
             start_date: eventDateTime.toISOString(),
@@ -463,7 +466,7 @@ export default function SubmitEventPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
         <div className="text-gray-600">Loading event...</div>
       </main>
     )
@@ -471,7 +474,7 @@ export default function SubmitEventPage() {
 
   if (isSubmitting) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
         <div className="text-gray-600">{isEditing ? 'Updating...' : 'Submitting...'}</div>
       </main>
     )
@@ -479,7 +482,7 @@ export default function SubmitEventPage() {
 
   if (publishSuccess) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center px-4">
+      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center space-y-6">
           <div className="text-6xl">✅</div>
           <div className="space-y-2">
@@ -498,7 +501,7 @@ export default function SubmitEventPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
       <div className="max-w-2xl mx-auto px-4 py-10">
         <div className="flex justify-between items-center mb-6">
           <Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">

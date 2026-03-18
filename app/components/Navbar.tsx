@@ -10,6 +10,7 @@ export default function Navbar() {
   const [user, setUser] = useState<User | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [hasStaffAccess, setHasStaffAccess] = useState(false)
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
@@ -25,6 +26,19 @@ export default function Navbar() {
     const getInitialUser = async () => {
       const { data } = await supabase.auth.getUser()
       setUser(data.user)
+      if (data.user) {
+        try {
+          const staffRes = await fetch('/api/staff/my-events')
+          if (staffRes.ok) {
+            const staffData = await staffRes.json()
+            setHasStaffAccess((staffData.events || []).length > 0)
+          }
+        } catch {
+          setHasStaffAccess(false)
+        }
+      } else {
+        setHasStaffAccess(false)
+      }
       setLoading(false)
     }
     getInitialUser()
@@ -34,6 +48,9 @@ export default function Navbar() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setUser(session?.user ?? null)
+      if (!session?.user) {
+        setHasStaffAccess(false)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -92,6 +109,24 @@ export default function Navbar() {
                   >
                     My Purchases
                   </Link>
+
+                  <Link
+                    href="/account"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Account
+                  </Link>
+
+                  {hasStaffAccess && (
+                    <Link
+                      href="/staff/scan"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 font-semibold"
+                    >
+                      Staff Scanner
+                    </Link>
+                  )}
 
                   {role === 'organizer' && (
                     <Link

@@ -367,6 +367,12 @@ export default function MyEventsPage() {
                     >
                       Edit
                     </Link>
+                    <Link
+                      href={`/my-events/${event.id}/staff`}
+                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 text-center"
+                    >
+                      Staff
+                    </Link>
                     {event.status === 'published' && (
                       <button
                         onClick={() => handleUnpublish(event.id)}

@@ -1,8 +1,14 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '../../../../lib/supabaseClient';
+import { canUserScanEvent, getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { orderId } = await req.json();
 
     if (!orderId || typeof orderId !== 'string') {
@@ -24,6 +30,7 @@ export async function POST(req: NextRequest) {
       .from('orders')
       .select(`
         id,
+        event_id,
         payment_status,
         total_amount,
         tickets (
@@ -39,6 +46,11 @@ export async function POST(req: NextRequest) {
         { error: 'Order not found' },
         { status: 404 }
       );
+    }
+
+    const allowed = await canUserScanEvent(order.event_id, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
     }
 
     const isPaid = order.payment_status === 'completed' || order.payment_status === 'paid';

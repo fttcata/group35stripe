@@ -34,6 +34,7 @@ type TicketAvailability = {
 function EventDetailsContent() {
   const searchParams = useSearchParams()
   const slug = searchParams.get("slug")
+	const [resolvedEventId, setResolvedEventId] = useState<string | null>(null)
 
 	const [event, setEvent] = useState<Event | null>(null)
 	const [isLoading, setIsLoading] = useState(true)
@@ -46,16 +47,19 @@ function EventDetailsContent() {
 				return
 			}
 
+			const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+			const uuidMatch = slug.match(uuidRegex)
+			const eventIdFromSlug = uuidMatch ? uuidMatch[0] : null
+
 			const staticEvent = eventsData.find((e) => e.slug === slug)
 			if (staticEvent) {
 				setEvent(staticEvent)
+				setResolvedEventId(eventIdFromSlug)
 				setIsLoading(false)
 				return
 			}
 
-			const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-			const uuidMatch = slug.match(uuidRegex)
-			const eventId = uuidMatch ? uuidMatch[0] : null
+			const eventId = eventIdFromSlug
 
 			if (!eventId) {
 				setIsLoading(false)
@@ -130,6 +134,7 @@ function EventDetailsContent() {
 				rating: 0,
 				ticketTypes: tickets,
 			})
+			setResolvedEventId(dbEvent.id)
 
 			setIsLoading(false)
 		}
@@ -180,7 +185,7 @@ function EventDetailsContent() {
     // Store cart data in localStorage
     localStorage.setItem('cartData', JSON.stringify({
       event: {
-        id: event.slug,
+				id: resolvedEventId || event.slug,
         title: event.title,
         date: event.date,
       },
@@ -196,7 +201,7 @@ function EventDetailsContent() {
 
 	if (!event && !isLoading) {
 		return (
-			<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
+			<main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
 				<div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
 					<h1 className="text-2xl font-bold text-gray-900">Event not found</h1>
 					<p className="text-gray-600">We couldn&apos;t find this event. Please return to the events list.</p>
@@ -213,7 +218,7 @@ function EventDetailsContent() {
 
 	if (!event) {
 		return (
-			<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
+			<main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
 				<div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
 					<h1 className="text-2xl font-bold text-gray-900">Loading event...</h1>
 				</div>
@@ -222,7 +227,7 @@ function EventDetailsContent() {
 	}
 
 	return (
-		<main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+		<main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
 			<div className="max-w-6xl mx-auto px-4 py-10">
 				<Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">
 					← Back to Events
