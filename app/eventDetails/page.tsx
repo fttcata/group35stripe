@@ -12,6 +12,12 @@ export const dynamic = 'force-dynamic'
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+function isOrganizerRole(role: unknown) {
+	if (typeof role !== 'string') return false
+	const normalized = role.trim().toLowerCase()
+	return normalized === 'organizer' || normalized === 'organiser'
+}
+
 function formatDate(d: string) {
 	try {
 		const date = new Date(d)
@@ -67,11 +73,30 @@ function EventDetailsContent() {
 			}
 
 			const supabase = createSupabaseBrowserClient()
-			const { data: dbEvent, error: dbError } = await supabase
+			const {
+				data: { user },
+			} = await supabase.auth.getUser()
+
+			let organizerMode = false
+			if (user?.id) {
+				const { data: profile } = await supabase
+					.from('profiles')
+					.select('role')
+					.eq('id', user.id)
+					.maybeSingle()
+				organizerMode = isOrganizerRole(profile?.role || user.user_metadata?.role)
+			}
+
+			const baseQuery = supabase
 				.from('events')
-				.select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
+				.select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,created_by')
 				.eq('id', eventId)
-				.single()
+
+			const scopedQuery = organizerMode && user?.id
+				? baseQuery.eq('created_by', user.id)
+				: baseQuery
+
+			const { data: dbEvent, error: dbError } = await scopedQuery.single()
 
 			if (dbError || !dbEvent) {
 				setIsLoading(false)

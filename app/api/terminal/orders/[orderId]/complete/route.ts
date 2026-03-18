@@ -10,6 +10,7 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
 interface CompleteTerminalPaymentBody {
   paymentIntentId?: string;
+  selectedEventId?: string;
 }
 
 export async function POST(
@@ -38,6 +39,10 @@ export async function POST(
       return NextResponse.json({ error: 'paymentIntentId is required' }, { status: 400 });
     }
 
+    if (!body.selectedEventId || typeof body.selectedEventId !== 'string') {
+      return NextResponse.json({ error: 'Selected event is required' }, { status: 400 });
+    }
+
     const { orderId } = await params;
     const paymentIntent = await stripe.paymentIntents.retrieve(body.paymentIntentId);
 
@@ -61,6 +66,10 @@ export async function POST(
     const allowed = await canUserScanEvent(order.event_id, user.id);
     if (!allowed) {
       return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
+    if (!order.event_id || order.event_id !== body.selectedEventId) {
+      return NextResponse.json({ error: 'This ticket belongs to a different event than the selected event' }, { status: 403 });
     }
 
     const { data: orderItems } = await supabase

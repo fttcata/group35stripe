@@ -138,7 +138,7 @@ export default function AccountClient({ email, fullName, role, memberSince }: Ac
 					<div className="flex items-center justify-between">
 						<h2 className="text-xl font-bold text-gray-900">My Staff Events</h2>
 						{staffEvents.length > 0 && (
-							<Link href="/staff/scan" className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2">
+							<Link href="/staff" className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2">
 								Open Scanner
 							</Link>
 						)}

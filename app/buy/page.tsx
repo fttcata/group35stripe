@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface CartData {
   event: { id: string; title: string; date: string };
@@ -61,6 +62,7 @@ export default function BuyPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cartData, setCartData] = useState<CartData | null>(null);
+  const [isOrganizerUser, setIsOrganizerUser] = useState(false);
   
   // Guest checkout form state
   const [guestInfo, setGuestInfo] = useState<GuestInfo>({
@@ -77,6 +79,35 @@ export default function BuyPage() {
     if (saved) {
       setCartData(JSON.parse(saved));
     }
+  }, []);
+
+  useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          setIsOrganizerUser(false);
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const role = String(profile?.role || user.user_metadata?.role || '').toLowerCase();
+        setIsOrganizerUser(role === 'organizer' || role === 'organiser');
+      } catch {
+        setIsOrganizerUser(false);
+      }
+    };
+
+    loadRole();
   }, []);
 
   // Validate form on input change
@@ -148,6 +179,11 @@ export default function BuyPage() {
   };
 
   const handleCheckout = async () => {
+    if (isOrganizerUser) {
+      setError('Organizers cannot buy tickets. Use an attendee account to purchase tickets.');
+      return;
+    }
+
     // Validate guest form first
     if (!validateForm()) {
       setError('Please fill in all required fields correctly');
@@ -371,10 +407,21 @@ export default function BuyPage() {
             </div>
           )}
 
+          {isOrganizerUser && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg">
+              <p className="text-sm text-amber-900 font-semibold">
+                Organizer accounts cannot purchase tickets.
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                Organizers can only create and manage events. Please use an attendee account for ticket purchases.
+              </p>
+            </div>
+          )}
+
           {/* Checkout Button */}
           <button
             onClick={handleCheckout}
-            disabled={isLoading}
+            disabled={isLoading || isOrganizerUser}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg mb-4 transition"
           >
             {isLoading ? 'Processing...' : cartData?.paymentOption === 'pay-on-day' ? 'Complete Registration (Pay at Check-in)' : `Confirm & Pay $${ticketDetails.totalPrice.toFixed(2)}`}

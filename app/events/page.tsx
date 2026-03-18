@@ -33,9 +33,16 @@ function parseLocalDate(dateStr: string) {
   return new Date(y, m - 1, d)
 }
 
+function isOrganizerRole(role: unknown) {
+  if (typeof role !== 'string') return false
+  const normalized = role.trim().toLowerCase()
+  return normalized === 'organizer' || normalized === 'organiser'
+}
+
 export default function EventsPage() {
   const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
   const [loading, setLoading] = useState(true)
+  const [isOrganizerView, setIsOrganizerView] = useState(false)
 
   // Filter state
   const [search, setSearch] = useState('')
@@ -49,10 +56,32 @@ export default function EventsPage() {
     const loadEvents = async () => {
       const supabase = createSupabaseBrowserClient()
 
-      const { data: dbEvents, error: dbError } = await supabase
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      let organizerMode = false
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        organizerMode = isOrganizerRole(profile?.role || user.user_metadata?.role)
+      }
+
+      setIsOrganizerView(organizerMode)
+
+      const baseQuery = supabase
         .from('events')
-        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,lat,lng')
-        .eq('status', 'published')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,lat,lng,status,created_by')
+
+      const scopedQuery = organizerMode && user?.id
+        ? baseQuery.eq('created_by', user.id)
+        : baseQuery.eq('status', 'published')
+
+      const { data: dbEvents, error: dbError } = await scopedQuery
 
       if (dbError) {
         console.error('Failed to load events:', dbError.message)
@@ -103,7 +132,7 @@ export default function EventsPage() {
         }
       })
 
-      setAllEvents([...eventsData, ...mappedEvents])
+      setAllEvents(organizerMode ? mappedEvents : [...eventsData, ...mappedEvents])
       setLoading(false)
     }
 
@@ -185,8 +214,107 @@ export default function EventsPage() {
     )
   }
 
+  if (isOrganizerView) {
+    const today = new Date()
+    const publishedCount = allEvents.filter((e: any) => e.status === 'published').length
+    const draftCount = allEvents.filter((e: any) => e.status === 'draft').length
+    const upcomingCount = allEvents.filter((e) => {
+      const eventDate = new Date(e.date)
+      return !Number.isNaN(eventDate.getTime()) && eventDate >= today
+    }).length
+
+    return (
+      <main className="min-h-screen bg-linear-to-br from-slate-950 via-cyan-950 to-slate-900 text-slate-100">
+        <section className="max-w-6xl mx-auto px-4 py-10">
+          <div className="rounded-3xl border border-cyan-500/20 bg-slate-900/70 backdrop-blur p-8 shadow-[0_24px_80px_rgba(6,182,212,0.18)]">
+            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Organizer View</p>
+            <h1 className="mt-2 text-4xl sm:text-5xl font-black bg-linear-to-r from-cyan-200 to-emerald-200 bg-clip-text text-transparent">
+              Event Command Center
+            </h1>
+            <p className="mt-3 max-w-2xl text-slate-300">
+              You can only view and manage your own events from here.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/submit-event" className="rounded-xl bg-linear-to-r from-cyan-400 to-emerald-300 text-slate-950 font-bold px-5 py-3 hover:from-cyan-300 hover:to-emerald-200">
+                Create Event
+              </Link>
+              <Link href="/my-events" className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 text-cyan-100 font-semibold px-5 py-3 hover:bg-cyan-500/20">
+                Open Full Event Manager
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
+              <p className="text-sm text-slate-400">Total Events</p>
+              <p className="mt-1 text-3xl font-black text-slate-100">{allEvents.length}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
+              <p className="text-sm text-slate-400">Published</p>
+              <p className="mt-1 text-3xl font-black text-emerald-300">{publishedCount}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5">
+              <p className="text-sm text-slate-400">Upcoming</p>
+              <p className="mt-1 text-3xl font-black text-cyan-300">{upcomingCount}</p>
+            </div>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-slate-700 bg-slate-900/80 p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xl font-bold">Your Events</h2>
+              {draftCount > 0 && (
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-600/20 border border-amber-500/40 text-amber-300">
+                  {draftCount} draft{draftCount !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {loading && (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-cyan-400"></div>
+              </div>
+            )}
+
+            {!loading && allEvents.length === 0 && (
+              <div className="mt-6 rounded-xl border border-slate-700 bg-slate-950/60 p-8 text-center">
+                <p className="text-slate-300">No events yet. Start by creating your first event.</p>
+              </div>
+            )}
+
+            {!loading && allEvents.length > 0 && (
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+                {allEvents.map((e) => (
+                  <div key={e.slug} className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-100">{e.title}</h3>
+                        <p className="text-sm text-slate-400 mt-1">{formatDisplayDate(e.date)}</p>
+                        <p className="text-sm text-slate-400">{e.location || 'Location TBA'}</p>
+                      </div>
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${(e as any).status === 'draft' ? 'bg-amber-600/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40'}`}>
+                        {(e as any).status === 'draft' ? 'Draft' : 'Published'}
+                      </span>
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Link href="/my-events" className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
+                        Manage
+                      </Link>
+                      <Link href="/submit-event" className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/20">
+                        Create New
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
       {/* Top Navigation */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
@@ -212,7 +340,7 @@ export default function EventsPage() {
       </div>
 
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-700 text-white">
+      <div className="relative overflow-hidden bg-linear-to-r from-purple-600 via-blue-600 to-indigo-700 text-white">
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative max-w-6xl mx-auto px-4 py-16 sm:py-24">
           <div className="text-center space-y-4">
@@ -225,7 +353,7 @@ export default function EventsPage() {
 
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-purple-50 to-transparent"></div>
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-linear-to-t from-purple-50 to-transparent"></div>
       </div>
 
       {/* Filters Section */}
@@ -467,10 +595,10 @@ export default function EventsPage() {
                 style={{ animationDelay: `${idx * 100}ms` }}
               >
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full px-6 py-2 shadow-lg">
+                  <div className="bg-linear-to-r from-purple-600 to-blue-600 text-white rounded-full px-6 py-2 shadow-lg">
                     <h2 className="text-xl font-bold">{month}</h2>
                   </div>
-                  <div className="flex-1 h-px bg-gradient-to-r from-purple-300 to-transparent"></div>
+                  <div className="flex-1 h-px bg-linear-to-r from-purple-300 to-transparent"></div>
                 </div>
                 <div className="flex flex-col gap-6">
                   {items.map((e, cardIdx) => (

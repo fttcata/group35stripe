@@ -36,13 +36,7 @@ export async function isUserOrganizerForEvent(eventId: string, userId: string): 
   if (!event) return false;
 
   if (!event.created_by) {
-    // Legacy fallback for events created before created_by existed.
-    const { data: profile } = await serverClient
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle();
-    return profile?.role === 'organizer';
+    return false;
   }
 
   return event.created_by === userId;

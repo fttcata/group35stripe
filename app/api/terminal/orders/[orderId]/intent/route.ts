@@ -8,7 +8,7 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const terminalCurrency = (process.env.STRIPE_TERMINAL_CURRENCY || 'eur').toLowerCase();
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
@@ -28,6 +28,12 @@ export async function POST(
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
+    const body = await req.json().catch(() => ({}));
+    const selectedEventId = body?.selectedEventId;
+    if (!selectedEventId || typeof selectedEventId !== 'string') {
+      return NextResponse.json({ error: 'Selected event is required' }, { status: 400 });
+    }
+
     const { orderId } = await params;
     const { data: order, error: orderError } = await supabase
       .from('orders')
@@ -42,6 +48,10 @@ export async function POST(
     const allowed = await canUserScanEvent(order.event_id, user.id);
     if (!allowed) {
       return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
+    if (!order.event_id || order.event_id !== selectedEventId) {
+      return NextResponse.json({ error: 'This ticket belongs to a different event than the selected event' }, { status: 403 });
     }
 
     if (order.payment_status === 'completed') {

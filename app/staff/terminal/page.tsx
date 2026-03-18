@@ -97,7 +97,7 @@ export default function StaffTerminalPage() {
             <h1 className="text-3xl font-bold text-gray-900">Stripe Terminal Reader</h1>
             <p className="text-gray-600 mt-1">Manage your payment reader connection</p>
           </div>
-          <Link href="/staff/scan" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+          <Link href="/staff" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
             📱 Scan Tickets
           </Link>
         </div>
@@ -169,7 +169,7 @@ export default function StaffTerminalPage() {
             </p>
 
             <Link
-              href="/staff/scan"
+              href="/staff"
               className="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
             >
               📱 Go to Ticket Scanner

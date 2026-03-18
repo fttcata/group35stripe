@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { supabase } from '../../../lib/supabaseClient';
+import { isAuthenticatedOrganizer } from '@/lib/organizerGuard';
 
 // Check if Stripe is configured
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -30,6 +31,13 @@ interface CheckoutRequest {
 
 export async function POST(req: NextRequest) {
   try {
+    if (await isAuthenticatedOrganizer()) {
+      return NextResponse.json(
+        { error: 'Organizers cannot buy tickets. Use an attendee account to purchase tickets.' },
+        { status: 403 }
+      );
+    }
+
     // Check if Stripe is configured
     if (!stripe) {
       return NextResponse.json(

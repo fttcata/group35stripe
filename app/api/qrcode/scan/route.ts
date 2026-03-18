@@ -9,7 +9,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { ticketCode, eventTitleHint } = await req.json();
+    const { ticketCode, eventTitleHint, selectedEventId } = await req.json();
+    if (!selectedEventId || typeof selectedEventId !== 'string') {
+      return NextResponse.json({ error: 'Selected event is required' }, { status: 400 });
+    }
+
 
     if (!ticketCode || typeof ticketCode !== 'string') {
       return NextResponse.json(
@@ -93,6 +97,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
     }
 
+    if (!resolvedEventId || resolvedEventId !== selectedEventId) {
+      return NextResponse.json({ error: 'This ticket is for a different event than the one currently selected' }, { status: 403 });
+    }
+
     // Get event title
     let eventTitle = 'Event';
     if (resolvedEventId) {
@@ -111,6 +119,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ticketCode,
       orderId: order.id,
+      eventId: resolvedEventId,
       customerName,
       eventTitle,
       paymentStatus: order.payment_status,

@@ -9,11 +9,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { orderId } = await req.json();
+    const { orderId, selectedEventId } = await req.json();
 
     if (!orderId || typeof orderId !== 'string') {
       return NextResponse.json(
         { error: 'Invalid order ID' },
+        { status: 400 }
+      );
+    }
+
+    if (!selectedEventId || typeof selectedEventId !== 'string') {
+      return NextResponse.json(
+        { error: 'Selected event is required' },
         { status: 400 }
       );
     }
@@ -51,6 +58,10 @@ export async function POST(req: NextRequest) {
     const allowed = await canUserScanEvent(order.event_id, user.id);
     if (!allowed) {
       return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
+    if (!order.event_id || order.event_id !== selectedEventId) {
+      return NextResponse.json({ error: 'This ticket belongs to a different event than the selected event' }, { status: 403 });
     }
 
     const isPaid = order.payment_status === 'completed' || order.payment_status === 'paid';

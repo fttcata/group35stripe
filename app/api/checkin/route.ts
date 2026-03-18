@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createTickets } from '../../../lib/ticketService';
 import { sendTicketConfirmationEmail } from '../../../lib/emailService';
 import { supabase } from '../../../lib/supabaseClient';
+import { isAuthenticatedOrganizer } from '@/lib/organizerGuard';
 
 interface CheckInRequest {
   email?: string;
@@ -16,6 +17,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 
 export async function POST(req: NextRequest) {
   try {
+    if (await isAuthenticatedOrganizer()) {
+      return NextResponse.json(
+        { error: 'Organizers cannot buy tickets. Use an attendee account to register for events.' },
+        { status: 403 }
+      );
+    }
+
     const body: CheckInRequest = await req.json().catch(() => ({}));
 
     const email = body.email?.trim();

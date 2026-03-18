@@ -26,6 +26,12 @@ function formatDate(d: string) {
   }
 }
 
+function isOrganizerRole(role: unknown): boolean {
+  if (typeof role !== 'string') return false
+  const normalized = role.trim().toLowerCase()
+  return normalized === 'organizer' || normalized === 'organiser'
+}
+
 export default function EventDetailsPage({ params: paramsPromise }: Props) {
   const params = use(paramsPromise)
   const [allEvents, setAllEvents] = useState<EventView[]>(eventsData)
@@ -34,10 +40,29 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
     const loadEvents = async () => {
       const supabase = createSupabaseBrowserClient()
 
-      const { data: dbEvents, error: dbError } = await supabase
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      let organizerMode = false
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle()
+        organizerMode = isOrganizerRole(profile?.role || user.user_metadata?.role)
+      }
+
+      const baseQuery = supabase
         .from('events')
-        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images')
-        .eq('status', 'published')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,created_by')
+
+      const scopedQuery = organizerMode && user?.id
+        ? baseQuery.eq('created_by', user.id)
+        : baseQuery.eq('status', 'published')
+
+      const { data: dbEvents, error: dbError } = await scopedQuery
 
       if (dbError) {
         console.error('Failed to load events:', dbError.message)

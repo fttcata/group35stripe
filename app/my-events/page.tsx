@@ -40,9 +40,20 @@ export default function MyEventsPage() {
       setLoading(true)
       const supabase = createSupabaseBrowserClient()
 
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user?.id) {
+        setError('Please sign in to manage your events')
+        setAllEvents([])
+        return
+      }
+
       const { data, error: dbError } = await supabase
         .from('events')
         .select('id,title,description,start_date,sport_category,venue,images,status')
+        .eq('created_by', user.id)
         .order('created_at', { ascending: false })
 
       if (dbError) {
@@ -199,14 +210,14 @@ export default function MyEventsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
+      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
         <div className="text-gray-600">Loading your events...</div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
       <div className="max-w-6xl mx-auto px-4 py-10">
         <div className="flex justify-between items-center mb-8">
           <div>

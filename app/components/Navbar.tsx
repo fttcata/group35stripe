@@ -11,6 +11,9 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [hasStaffAccess, setHasStaffAccess] = useState(false)
+  const [role, setRole] = useState<string | undefined>(undefined)
+
+  const isOrganizer = role === 'organizer' || role === 'organiser'
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
@@ -27,6 +30,15 @@ export default function Navbar() {
       const { data } = await supabase.auth.getUser()
       setUser(data.user)
       if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .maybeSingle()
+
+        const resolvedRole = String(profile?.role || data.user.user_metadata?.role || '').toLowerCase()
+        setRole(resolvedRole || undefined)
+
         try {
           const staffRes = await fetch('/api/staff/my-events')
           if (staffRes.ok) {
@@ -50,6 +62,7 @@ export default function Navbar() {
       setUser(session?.user ?? null)
       if (!session?.user) {
         setHasStaffAccess(false)
+        setRole(undefined)
       }
     })
 
@@ -65,8 +78,6 @@ export default function Navbar() {
     window.location.href = '/'
   }
 
-  const role = user?.user_metadata?.role as string | undefined
-
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -78,8 +89,8 @@ export default function Navbar() {
 
         {/* Nav links */}
         <div className="flex items-center gap-4">
-          <Link href="/events" className="text-sm text-gray-600 hover:text-gray-900">
-            Events
+          <Link href={isOrganizer ? '/organizer' : '/events'} className="text-sm text-gray-600 hover:text-gray-900">
+            {isOrganizer ? 'Command Center' : 'Events'}
           </Link>
 
           {loading ? (
@@ -103,11 +114,11 @@ export default function Navbar() {
                   </div>
 
                   <Link
-                    href="/purchases/history"
+                    href={isOrganizer ? '/my-events' : '/purchases/history'}
                     onClick={() => setMenuOpen(false)}
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
-                    My Purchases
+                    {isOrganizer ? 'My Events' : 'My Purchases'}
                   </Link>
 
                   <Link
@@ -120,7 +131,7 @@ export default function Navbar() {
 
                   {hasStaffAccess && (
                     <Link
-                      href="/staff/scan"
+                      href="/staff"
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 font-semibold"
                     >
@@ -128,14 +139,30 @@ export default function Navbar() {
                     </Link>
                   )}
 
-                  {role === 'organizer' && (
-                    <Link
-                      href="/submit-event"
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Submit Event
-                    </Link>
+                  {isOrganizer && (
+                    <>
+                      <Link
+                        href="/organizer"
+                        onClick={() => setMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Command Center
+                      </Link>
+                      <Link
+                        href="/organizer/insights"
+                        onClick={() => setMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Insights
+                      </Link>
+                      <Link
+                        href="/submit-event"
+                        onClick={() => setMenuOpen(false)}
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Create Event
+                      </Link>
+                    </>
                   )}
 
                   <button
