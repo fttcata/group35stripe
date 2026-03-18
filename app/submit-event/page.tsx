@@ -366,6 +366,7 @@ export default function SubmitEventPage() {
           name: ticket.name,
           price: ticket.price,
           quantity: ticket.quantity,
+          quantity_available: ticket.quantity,
         }))
 
         const { error: ticketInsertError } = await supabase
@@ -430,6 +431,7 @@ export default function SubmitEventPage() {
           name: ticket.name,
           price: ticket.price,
           quantity: ticket.quantity,
+          quantity_available: ticket.quantity,
         }))
 
         const { error: ticketInsertError } = await supabase
