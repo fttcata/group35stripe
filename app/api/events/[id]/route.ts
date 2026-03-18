@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 export async function PUT(
   req: NextRequest,
@@ -12,7 +14,14 @@ export async function PUT(
     const { id } = await params
     const body = await req.json()
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: 'Supabase not configured' },
+        { status: 503 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     // Update event
     const { error: updateError } = await supabase
@@ -88,7 +97,14 @@ export async function GET(
   try {
     const { id } = await params
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    if (!supabaseUrl || !anonKey) {
+      return NextResponse.json(
+        { error: 'Supabase not configured' },
+        { status: 503 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, anonKey)
 
     // Fetch event with ticket types
     const { data: event, error: eventError } = await supabase
@@ -114,6 +130,82 @@ export async function GET(
     console.error('Error fetching event:', error)
     return NextResponse.json(
       { error: 'Failed to fetch event' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: 'Supabase not configured' },
+        { status: 503 }
+      )
+    }
+
+    const authSupabase = await createSupabaseServerClient()
+    const { data: { user } } = await authSupabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey)
+
+    const { data: eventRow, error: eventError } = await adminSupabase
+      .from('events')
+      .select('id, created_by')
+      .eq('id', id)
+      .single()
+
+    if (eventError || !eventRow) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 })
+    }
+
+    if (eventRow.created_by !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { count: orderCount, error: orderCountError } = await adminSupabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', id)
+
+    if (orderCountError) {
+      return NextResponse.json(
+        { error: orderCountError.message },
+        { status: 500 }
+      )
+    }
+
+    if ((orderCount || 0) > 0) {
+      return NextResponse.json(
+        { error: 'Event has orders. Delete orders first or unpublish instead.' },
+        { status: 409 }
+      )
+    }
+
+    const { error: deleteError } = await adminSupabase
+      .from('events')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete event' },
       { status: 500 }
     )
   }

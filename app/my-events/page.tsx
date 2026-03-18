@@ -13,7 +13,7 @@ type TicketInfo = {
 }
 
 type EventManagement = {
-  id: number
+  id: string
   title: string
   description: string
   start_date: string
@@ -161,21 +161,15 @@ export default function MyEventsPage() {
     }
   }
 
-  const handleDeleteEvent = async (id: number, title: string) => {
+  const handleDeleteEvent = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete "${title}"?`)) return
 
     try {
-      const supabase = createSupabaseBrowserClient()
-
-      // Delete event and its associated ticket types (cascade should handle this)
-      const { error: deleteError } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', id)
-
-      if (deleteError) {
-        setError('Failed to delete event')
-        console.error(deleteError)
+      const res = await fetch(`/api/events/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data?.error || 'Failed to delete event')
+        console.error(data)
         return
       }
 
@@ -186,7 +180,7 @@ export default function MyEventsPage() {
     }
   }
 
-  const handleUnpublish = async (id: number) => {
+  const handleUnpublish = async (id: string) => {
     try {
       const supabase = createSupabaseBrowserClient()
 
@@ -379,6 +373,12 @@ export default function MyEventsPage() {
 
                   {/* Action Buttons */}
                   <div className="flex flex-col gap-2 self-center">
+                    <Link
+                      href={`/my-events/${event.id}/sales`}
+                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 text-center"
+                    >
+                      View Sales
+                    </Link>
                     <Link
                       href={`/submit-event?id=${event.id}`}
                       className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 text-center"

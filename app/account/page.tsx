@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import StripeConnectButton from './StripeConnectButton'
 
 export default async function AccountPage() {
   const supabase = await createSupabaseServerClient()
@@ -17,6 +18,7 @@ export default async function AccountPage() {
 
   const role = profile?.role || user.user_metadata?.role || 'attendee'
   const fullName = profile?.full_name || user.user_metadata?.full_name || ''
+  const stripeConnected = Boolean(profile?.stripe_account_id)
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -51,6 +53,10 @@ export default async function AccountPage() {
               })}
             </p>
           </div>
+
+          {role === 'organizer' && (
+            <StripeConnectButton connected={stripeConnected} />
+          )}
         </div>
       </div>
     </div>

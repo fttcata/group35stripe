@@ -76,12 +76,14 @@ function EventDetailsContent() {
 
 			const { data: ticketRows } = await supabase
 				.from('ticket_types')
-				.select('id,name,price,quantity')
+				.select('id,name,price,quantity_available')
 				.eq('event_id', eventId)
 
 			const tickets: TicketType[] = (ticketRows || []).map((row) => ({
+				id: row.id,
 				name: row.name,
 				price: row.price,
+				quantity: row.quantity_available ?? 0,
 			}))
 
 			// Fetch sold count for each ticket type
@@ -95,7 +97,7 @@ function EventDetailsContent() {
 						.eq('ticket_type_id', row.id)
 					
 					const sold = soldTickets?.length || 0
-					const total = row.quantity || 0
+					const total = row.quantity_available || 0
 					availability[i] = {
 						total,
 						sold,
@@ -104,9 +106,9 @@ function EventDetailsContent() {
 				} catch (err) {
 					// Tickets table might not exist, assume all are available
 					availability[i] = {
-						total: row.quantity || 0,
+						total: row.quantity_available || 0,
 						sold: 0,
-						available: row.quantity || 0
+						available: row.quantity_available || 0
 					}
 				}
 			}
@@ -117,6 +119,7 @@ function EventDetailsContent() {
 			const slugBase = dbEvent.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
 
 			setEvent({
+				id: dbEvent.id,
 				slug: `${slugBase}-${dbEvent.id}`,
 				title: dbEvent.title,
 				description: dbEvent.description,
@@ -180,7 +183,7 @@ function EventDetailsContent() {
     // Store cart data in localStorage
     localStorage.setItem('cartData', JSON.stringify({
       event: {
-        id: event.slug,
+        id: event.id || event.slug || 'unknown',
         title: event.title,
         date: event.date,
       },
@@ -188,6 +191,7 @@ function EventDetailsContent() {
       paymentOption,
       totalPrice: totals.totalPrice,
       totalTickets: totals.totalTickets,
+			ticketTypes: event.ticketTypes || [],
     }))
     
     // Redirect to checkout

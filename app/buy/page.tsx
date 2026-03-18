@@ -9,6 +9,7 @@ interface CartData {
   paymentOption: string;
   totalPrice: number;
   totalTickets: number;
+  ticketTypes?: Array<{ id?: string; name: string; price: number }>;
 }
 
 interface GuestInfo {
@@ -138,6 +139,13 @@ export default function BuyPage() {
     quantity: 1,
   };
 
+  const items = cartData?.ticketTypes?.map((ticket, index) => ({
+    ticketTypeId: ticket.id,
+    name: ticket.name,
+    price: ticket.price,
+    quantity: cartData.quantities[index.toString()] ?? 0,
+  })).filter((item) => item.quantity > 0) || [];
+
   const handleCheckout = async () => {
     // Validate guest form first
     if (!validateForm()) {
@@ -179,6 +187,7 @@ export default function BuyPage() {
             amount: ticketDetails.totalPrice,
             eventId: ticketDetails.eventId,
             quantity: ticketDetails.quantity,
+            items,
           }),
         });
 
@@ -204,6 +213,7 @@ export default function BuyPage() {
           eventId: ticketDetails.eventId,
           totalPrice: Math.round(ticketDetails.totalPrice * 100), // Convert to cents
           quantity: ticketDetails.quantity,
+          items,
           // Guest checkout info
           isGuest: true,
           guestName: guestInfo.name.trim(),
