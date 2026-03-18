@@ -106,7 +106,8 @@ export async function POST(
       if (orderItems && orderItems.length > 0) {
         for (const item of orderItems) {
           const qty = Math.max(1, Number(item.quantity) || 1);
-          const ticketTypeName = item.ticket_types?.name || 'Standard';
+            const ticketTypesObj = item.ticket_types as any;
+            const ticketTypeName = ticketTypesObj?.name || (Array.isArray(ticketTypesObj) ? ticketTypesObj[0]?.name : undefined) || 'Standard';
           const created = await createTickets(orderId, eventTitle, ticketTypeName, qty);
           tickets = tickets.concat(created);
 

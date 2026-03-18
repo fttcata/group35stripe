@@ -167,7 +167,7 @@ export async function GET(
         return NextResponse.json({ error: itemsError.message }, { status: 500 });
       }
 
-      orderItems = (itemRows || []) as OrderItemRow[];
+      orderItems = (itemRows || []) as unknown as OrderItemRow[];
     }
 
     const revenueByTypeMap = new Map<string, { ticket_type: string; sold: number; revenue: number }>();

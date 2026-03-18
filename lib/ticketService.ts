@@ -7,6 +7,7 @@ export interface Ticket {
   qr_code_data: string;
   ticket_type: string;
   is_used: boolean;
+  check_in_code?: string;
 }
 
 /**
@@ -17,6 +18,15 @@ function generateTicketCode(): string {
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `TICKET-${timestamp}-${randomPart}`;
+}
+
+/**
+ * Generates a unique check-in code
+ */
+function generateCheckInCode(): string {
+  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `CHK-${timestamp}-${randomPart}`;
 }
 
 /**
