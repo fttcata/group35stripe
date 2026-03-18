@@ -345,7 +345,7 @@ export default function MyEventsPage() {
                             <div className="flex flex-wrap gap-6 text-sm">
                               {(event.totalTickets || 0) > 0 && (
                                 <div>
-                                  <span className="text-gray-500">Tickets: </span>
+                                  <span className="text-gray-500">Tickets Sold: </span>
                                   <span className="font-semibold text-gray-900">
                                     {event.totalSold || 0}/{event.totalTickets}
                                   </span>
