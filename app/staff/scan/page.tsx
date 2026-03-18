@@ -21,6 +21,8 @@ export default function StaffScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const scanInFlightRef = useRef(false);
   const barcodeDetectorRef = useRef<any>(null);
 
@@ -38,10 +40,8 @@ export default function StaffScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [manualTicketCode, setManualTicketCode] = useState('');
-  const [lastDecodedPreview, setLastDecodedPreview] = useState<string>('');
-  const [lastDecodeStatus, setLastDecodeStatus] = useState<'none' | 'accepted' | 'rejected'>('none');
-  const [lastDecodeEngine, setLastDecodeEngine] = useState<'none' | 'barcode-detector' | 'jsqr'>('none');
 
   useEffect(() => {
     let mounted = true;
@@ -141,20 +141,28 @@ export default function StaffScanPage() {
     if (!terminal || !connectedReader) return;
 
     const ownerName = ticket.customerName || 'Customer';
-    const isCheckedInMessage = ticket.isPaid;
+    const alreadyCheckedIn = ticket.tickets.some((t) => t.is_used);
     const amountCents = Math.max(0, Math.round(Number(ticket.totalAmount || 0) * 100));
 
-    const lineItems = isCheckedInMessage
+    const lineItems = alreadyCheckedIn
       ? [
           {
-            description: `Checked In! - ${ownerName}`,
+            description: `ERROR - ${ownerName}: already checked in`,
+            amount: 0,
+            quantity: 1,
+          },
+        ]
+      : ticket.isPaid
+      ? [
+          {
+            description: `${ownerName}: Paid - ready to check in`,
             amount: 0,
             quantity: 1,
           },
         ]
       : [
           {
-            description: `${ownerName} - Outstanding balance`,
+            description: `${ownerName}: Outstanding balance`,
             amount: amountCents,
             quantity: 1,
           },
@@ -166,7 +174,7 @@ export default function StaffScanPage() {
         currency: 'eur',
         line_items: lineItems,
         tax: 0,
-        total: isCheckedInMessage ? 0 : amountCents,
+        total: alreadyCheckedIn || ticket.isPaid ? 0 : amountCents,
       },
     });
 
@@ -175,10 +183,53 @@ export default function StaffScanPage() {
     }
   }
 
+  const playDuplicateAlertBeep = async () => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContextCtor();
+      }
+
+      const audioContext = audioContextRef.current;
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      const now = audioContext.currentTime;
+      const beep = (start: number, frequency: number, duration: number) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(frequency, start);
+
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.35, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.02);
+      };
+
+      // Three quick harsh beeps to signal a blocking error state.
+      beep(now, 940, 0.12);
+      beep(now + 0.17, 760, 0.12);
+      beep(now + 0.34, 620, 0.16);
+    } catch {
+      // Ignore audio errors (for example, autoplay policies).
+    }
+  };
+
   // Start camera
   const startCamera = async () => {
     try {
       setError(null);
+      setVideoReady(false);
 
       if (typeof window === 'undefined' || typeof navigator === 'undefined') {
         throw new Error('Camera is not available in this environment.');
@@ -190,19 +241,39 @@ export default function StaffScanPage() {
         );
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setCameraActive(true);
-        setScanning(true);
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+      } catch {
+        // Desktop/laptop webcams may not support environment-facing constraints.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
       }
+
+      streamRef.current = stream;
+
+      if (!videoRef.current) {
+        throw new Error('Camera preview element is not ready. Refresh and try again.');
+      }
+
+      videoRef.current.srcObject = stream;
+      setCameraActive(true);
+      try {
+        await videoRef.current.play();
+      } catch {
+        // Keep stream attached even if autoplay is blocked; user can tap Start Live Feed.
+      }
+      setScanning(true);
     } catch (err) {
       setError(
         err instanceof Error
@@ -214,11 +285,26 @@ export default function StaffScanPage() {
 
   // Stop camera
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
       tracks.forEach(track => track.stop());
-      setCameraActive(false);
-      setScanning(false);
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+    setVideoReady(false);
+    setScanning(false);
+  };
+
+  const startPreviewPlayback = async () => {
+    if (!videoRef.current) return;
+    try {
+      await videoRef.current.play();
+      setVideoReady(true);
+    } catch {
+      setError('Browser blocked preview playback. Click Start Live Feed again.');
     }
   };
 
@@ -252,7 +338,6 @@ export default function StaffScanPage() {
 
         const detected = await barcodeDetectorRef.current.detect(canvas);
         if (Array.isArray(detected) && detected.length > 0 && detected[0].rawValue) {
-          setLastDecodeEngine('barcode-detector');
           return String(detected[0].rawValue);
         }
       }
@@ -265,7 +350,6 @@ export default function StaffScanPage() {
       inversionAttempts: 'attemptBoth',
     });
     if (code?.data) {
-      setLastDecodeEngine('jsqr');
       return code.data;
     }
 
@@ -301,19 +385,14 @@ export default function StaffScanPage() {
   const handleQRScanned = async (qrData: string) => {
     setLoading(true);
     setError(null);
-    const preview = qrData.length > 60 ? `${qrData.slice(0, 60)}...` : qrData;
-    setLastDecodedPreview(preview);
     try {
       // QR contains format: TICKET-YYYYMMDD-XXXXXX|Event Title|timestamp
       const parts = qrData.split('|');
       const ticketCode = parts[0];
 
       if (!ticketCode || !ticketCode.startsWith('TICKET-')) {
-        setLastDecodeStatus('rejected');
         throw new Error('Invalid QR code format');
       }
-
-      setLastDecodeStatus('accepted');
 
       const response = await fetch('/api/qrcode/scan', {
         method: 'POST',
@@ -328,6 +407,9 @@ export default function StaffScanPage() {
       }
 
       setScannedData(data);
+      if (data.tickets?.some((t: { is_used: boolean }) => t.is_used)) {
+        await playDuplicateAlertBeep();
+      }
       await setReaderDisplayForScan(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Scan failed');
@@ -511,37 +593,62 @@ export default function StaffScanPage() {
 
         {/* Camera Feed */}
         <div className="mb-6">
-          {!cameraActive ? (
-            <button
-              onClick={startCamera}
-              className="w-full rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-5 px-6 text-xl"
-            >
-              Start Camera and Scan
-            </button>
-          ) : (
-            <>
-              <div className="relative bg-black rounded-2xl overflow-hidden mb-4 border border-slate-700">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-[66vh] max-h-160 object-cover"
-                />
-                <canvas ref={canvasRef} hidden width="300" height="300" />
-                <div className="absolute inset-0 border-4 border-cyan-400 m-10 rounded-xl pointer-events-none">
-                  <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-cyan-500/20" />
-                </div>
-                <div className="absolute top-3 left-3 rounded-full px-3 py-1 text-xs font-bold bg-slate-950/70 text-cyan-200 border border-cyan-500/40">
-                  {scanning ? 'Live: scanning' : scannedData ? 'Live: scan paused for ticket action' : 'Live camera'}
-                </div>
+          <div className="relative bg-black rounded-2xl overflow-hidden mb-4 border border-slate-700 min-h-85">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              onLoadedMetadata={() => setVideoReady(true)}
+              onPlaying={() => setVideoReady(true)}
+              className="w-full h-[66vh] max-h-160 object-cover"
+            />
+            <canvas ref={canvasRef} hidden width="300" height="300" />
+            <div className="absolute inset-0 border-4 border-cyan-400 m-10 rounded-xl pointer-events-none">
+              <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-cyan-500/20" />
+            </div>
+
+            {!cameraActive && (
+              <div className="absolute inset-0 grid place-items-center bg-slate-950/70 p-4">
+                <button
+                  onClick={startCamera}
+                  className="w-full max-w-sm rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-5 px-6 text-xl"
+                >
+                  Start Camera and Scan
+                </button>
               </div>
-              <button
-                onClick={stopCamera}
-                className="w-full rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-4"
-              >
-                Stop Camera
-              </button>
-            </>
+            )}
+
+            {cameraActive && !videoReady && (
+              <div className="absolute inset-0 grid place-items-center bg-slate-950/60 p-4 text-center">
+                <p className="text-slate-200 text-sm font-semibold mb-3">Starting live camera feed...</p>
+                <button
+                  onClick={startPreviewPlayback}
+                  className="rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4"
+                >
+                  Start Live Feed
+                </button>
+              </div>
+            )}
+
+            <div className="absolute top-3 left-3 rounded-full px-3 py-1 text-xs font-bold bg-slate-950/70 text-cyan-200 border border-cyan-500/40">
+              {!cameraActive
+                ? 'Live camera not started'
+                : scanning
+                ? 'Live: scanning'
+                : scannedData
+                ? 'Live: scan paused for ticket action'
+                : 'Live camera'}
+            </div>
+          </div>
+
+          {cameraActive && (
+            <button
+              onClick={stopCamera}
+              className="w-full rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-4"
+            >
+              Stop Camera
+            </button>
           )}
 
           {error && (
@@ -577,27 +684,6 @@ export default function StaffScanPage() {
             </div>
           )}
 
-          <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-xs">
-            <p className="text-slate-300 font-semibold">Scanner Debug</p>
-            <p className="text-slate-400 mt-1">
-              Status:{' '}
-              <span className={
-                lastDecodeStatus === 'accepted'
-                  ? 'text-emerald-300'
-                  : lastDecodeStatus === 'rejected'
-                  ? 'text-amber-300'
-                  : 'text-slate-500'
-              }>
-                {lastDecodeStatus === 'none' ? 'Waiting for decode...' : lastDecodeStatus}
-              </span>
-            </p>
-            <p className="text-slate-400 mt-1">
-              Decoder engine: {lastDecodeEngine}
-            </p>
-            <p className="text-slate-400 mt-1 break-all">
-              Last decoded text: {lastDecodedPreview || 'No QR decoded yet'}
-            </p>
-          </div>
         </div>
 
         {/* Scanned Ticket Details */}
@@ -612,9 +698,19 @@ export default function StaffScanPage() {
             </div>
 
             {/* Status Badge */}
-            <div className={`mb-6 p-4 rounded-xl border-2 ${scannedData.isPaid ? 'bg-emerald-950/40 border-emerald-600 text-emerald-200' : 'bg-amber-950/40 border-amber-600 text-amber-200'}`}>
+            <div className={`mb-6 p-4 rounded-xl border-2 ${
+              scannedData.tickets.some(t => t.is_used)
+                ? 'bg-cyan-950/40 border-cyan-600 text-cyan-200'
+                : scannedData.isPaid
+                ? 'bg-emerald-950/40 border-emerald-600 text-emerald-200'
+                : 'bg-amber-950/40 border-amber-600 text-amber-200'
+            }`}>
               <p className="font-bold text-lg">
-                {scannedData.isPaid ? 'Checked In! (Paid)' : `Outstanding Balance: EUR ${scannedData.totalAmount.toFixed(2)}`}
+                {scannedData.tickets.some(t => t.is_used)
+                  ? `${scannedData.customerName || 'Customer'}: Already checked in`
+                  : scannedData.isPaid
+                  ? 'Paid: ready to check in'
+                  : `Outstanding Balance: EUR ${scannedData.totalAmount.toFixed(2)}`}
               </p>
               <p className="text-sm mt-1 text-slate-300">
                 Reader display is synced for this ticket.
@@ -629,8 +725,10 @@ export default function StaffScanPage() {
 
             {/* Already Used Check */}
             {scannedData.tickets.some(t => t.is_used) && (
-              <div className="mb-6 bg-rose-950/50 p-4 rounded-xl border-2 border-rose-700 text-rose-200">
-                <p className="font-bold">Already Checked In</p>
+              <div className="mb-6 bg-red-900/60 p-4 rounded-xl border-2 border-red-500 text-red-100">
+                <p className="font-black text-lg">STOP: Duplicate check-in scan</p>
+                <p className="mt-1 font-semibold">This paid ticket has already been scanned and checked in.</p>
+                <p className="mt-1 text-sm text-red-200">Terminal message sent: ERROR - {(scannedData.customerName || 'Customer')}: already checked in</p>
               </div>
             )}
 
