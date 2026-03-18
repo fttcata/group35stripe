@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS events (
 -- ALTER TABLE events ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'draft';
 -- ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by uuid;
 
+-- Add check_in_code column to existing tickets table:
+-- ALTER TABLE tickets ADD COLUMN IF NOT EXISTS check_in_code text;
+-- UPDATE tickets SET check_in_code = LPAD(FLOOR(RANDOM() * 900000 + 100000)::text, 6, '0') WHERE check_in_code IS NULL;
+
 CREATE TABLE IF NOT EXISTS ticket_types (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id uuid REFERENCES events(id) ON DELETE CASCADE,
@@ -57,6 +61,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
   ticket_code text UNIQUE NOT NULL,
+  check_in_code text NOT NULL,
   qr_code_data text NOT NULL,
   ticket_type text NOT NULL,
   is_used boolean DEFAULT false,

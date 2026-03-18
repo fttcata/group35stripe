@@ -216,8 +216,9 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
                   ${ticket.ticket_code}
                 </div>
                 <div class="qr-code">
-                  <p style="margin: 10px 0; font-size: 12px; color: #6b7280;">Scan at entry</p>
+                  <p style="margin: 10px 0; font-size: 12px; color: #6b7280; font-weight: 500;">Show this QR code at check-in</p>
                   <img src="${ticketImageUrls[index] || ticket.qr_code_data || 'cid:qr_code_' + index}" alt="QR Code for Ticket ${index + 1}">
+                  <p style="margin: 8px 0 0 0; font-size: 11px; color: #9ca3af; text-align: center;">A staff member will scan this to check you in</p>
                 </div>
               </div>
             `).join('')}

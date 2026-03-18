@@ -1,27 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { loadStripeTerminal } from '@stripe/terminal-js';
 import type { Reader, Terminal } from '@stripe/terminal-js';
-
-interface OrderLookupResponse {
-  orderId: string;
-  event: {
-    title?: string;
-    date?: string;
-    venue?: string;
-  } | null;
-  tickets: Array<{
-    id: string;
-    is_used: boolean;
-  }>;
-  paymentStatus: string;
-  totalAmount: number;
-}
+import Link from 'next/link';
 
 export default function StaffTerminalPage() {
-  const [orderIdInput, setOrderIdInput] = useState('');
-  const [order, setOrder] = useState<OrderLookupResponse | null>(null);
   const [readerLabel, setReaderLabel] = useState('');
   const [simulated, setSimulated] = useState(true);
   const [status, setStatus] = useState('Initialize Stripe Terminal to begin.');
@@ -73,248 +57,132 @@ export default function StaffTerminalPage() {
     };
   }, []);
 
-  const amountDueCents = useMemo(() => {
-    if (!order) return 0;
-    return Math.round(Number(order.totalAmount || 0) * 100);
-  }, [order]);
-
-  async function lookupOrder() {
-    try {
-      setError(null);
-      setStatus('Looking up order...');
-      const id = orderIdInput.trim();
-      if (!id) {
-        setError('Order ID is required.');
-        return;
-      }
-
-      const res = await fetch(`/api/tickets?orderId=${encodeURIComponent(id)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || data.message || 'Failed to load order');
-      }
-
-      setOrder(data as OrderLookupResponse);
-      setStatus('Order loaded. Discover and connect a reader.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Order lookup failed');
-    }
-  }
-
   async function discoverReaders() {
-    if (!terminal) {
-      setError('Terminal is not initialized yet.');
-      return;
-    }
-
+    if (!terminal) { setError('Terminal is not initialized yet.'); return; }
     try {
       setError(null);
       setStatus('Discovering readers...');
       const result = await terminal.discoverReaders({ simulated });
-      if ('error' in result) {
-        throw new Error(result.error.message);
-      }
+      if ('error' in result) throw new Error(result.error.message);
       setDiscoveredReaders(result.discoveredReaders || []);
-      setStatus(`Discovered ${(result.discoveredReaders || []).length} reader(s).`);
+      setStatus(`Found ${result.discoveredReaders?.length || 0} reader(s).`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discover readers');
+      setError(err instanceof Error ? err.message : 'Discovery failed');
     }
   }
 
   async function connectReader(reader: Reader) {
-    if (!terminal) {
-      setError('Terminal is not initialized yet.');
-      return;
-    }
-
+    if (!terminal) { setError('Terminal is not initialized yet.'); return; }
+    setIsBusy(true);
+    setStatus('Connecting...');
     try {
       setError(null);
-      setStatus(`Connecting to reader ${reader.label || reader.serial_number || reader.id}...`);
       const result = await terminal.connectReader(reader);
-      if ('error' in result) {
-        throw new Error(result.error.message);
-      }
-      setConnectedReader(result.reader || reader);
-      setReaderLabel(result.reader?.label || reader.label || reader.id);
-      setStatus('Reader connected. Ready to collect payment.');
+      if ('error' in result) throw new Error(result.error.message);
+      setConnectedReader(reader);
+      setReaderLabel(reader.label);
+      setStatus(`Connected to ${reader.label}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect reader');
-    }
-  }
-
-  async function processTerminalPayment() {
-    if (!terminal) {
-      setError('Terminal is not initialized yet.');
-      return;
-    }
-    if (!connectedReader) {
-      setError('Connect a reader first.');
-      return;
-    }
-    if (!order) {
-      setError('Load an order first.');
-      return;
-    }
-
-    try {
-      setIsBusy(true);
-      setError(null);
-      setStatus('Creating terminal payment intent...');
-
-      const createIntentRes = await fetch(`/api/terminal/orders/${order.orderId}/intent`, {
-        method: 'POST',
-      });
-      const createIntentData = await createIntentRes.json();
-      if (!createIntentRes.ok) {
-        throw new Error(createIntentData.error || 'Failed to create payment intent');
-      }
-      const displayCurrency = String(createIntentData.currency || 'eur').toLowerCase();
-
-      if (amountDueCents > 0) {
-        await terminal.setReaderDisplay({
-          type: 'cart',
-          cart: {
-            line_items: [
-              {
-                description: order.event?.title || 'Event Ticket',
-                amount: amountDueCents,
-                quantity: 1,
-              },
-            ],
-            tax: 0,
-            total: amountDueCents,
-            currency: displayCurrency,
-          },
-        });
-      }
-
-      setStatus('Present card to reader...');
-      const collectResult = await terminal.collectPaymentMethod(createIntentData.clientSecret);
-      if ('error' in collectResult) {
-        throw new Error(collectResult.error.message);
-      }
-
-      setStatus('Processing payment...');
-      const processResult = await terminal.processPayment(collectResult.paymentIntent);
-      if ('error' in processResult) {
-        throw new Error(processResult.error.message);
-      }
-
-      const finalizeRes = await fetch(`/api/terminal/orders/${order.orderId}/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          paymentIntentId: processResult.paymentIntent.id,
-        }),
-      });
-      const finalizeData = await finalizeRes.json();
-      if (!finalizeRes.ok) {
-        throw new Error(finalizeData.error || 'Failed to finalize payment/check-in');
-      }
-
-      setStatus(
-        `Payment complete. Checked in ${finalizeData.checkedInCount} ticket(s). Receipt email ${finalizeData.receiptEmailMessageId ? 'sent' : 'attempted'}.`
-      );
-      await lookupOrder();
-      await terminal.clearReaderDisplay();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Terminal payment failed');
+      setError(err instanceof Error ? err.message : 'Connection failed');
     } finally {
       setIsBusy(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto max-w-4xl rounded-xl bg-white p-6 shadow">
-        <h1 className="mb-4 text-2xl font-bold text-gray-900">Stripe Terminal Check-In</h1>
-        <p className="mb-6 text-sm text-gray-600">
-          Staff flow: load pay-on-day order, connect reader, take payment, auto check-in, email receipt.
-        </p>
-
-        <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-          <input
-            value={orderIdInput}
-            onChange={(e) => setOrderIdInput(e.target.value)}
-            placeholder="Order ID (UUID)"
-            className="rounded border border-gray-300 px-3 py-2"
-          />
-          <button
-            type="button"
-            onClick={lookupOrder}
-            className="rounded bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
-          >
-            Load Order
-          </button>
-        </div>
-
-        {order && (
-          <div className="mb-6 rounded border border-gray-200 bg-gray-50 p-4 text-sm">
-            <p><strong>Order:</strong> {order.orderId}</p>
-            <p><strong>Event:</strong> {order.event?.title || 'Event Ticket'}</p>
-            <p><strong>Amount Due:</strong> ${Number(order.totalAmount || 0).toFixed(2)}</p>
-            <p><strong>Current Payment Status:</strong> {order.paymentStatus}</p>
+    <div className="min-h-screen bg-gray-50 antialiased">
+      <header className="bg-white border-b border-gray-200 p-4">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Stripe Terminal Reader</h1>
+            <p className="text-gray-600 mt-1">Manage your payment reader connection</p>
           </div>
-        )}
+          <Link href="/staff/scan" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+            📱 Scan Tickets
+          </Link>
+        </div>
+      </header>
 
-        <div className="mb-4 flex items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={simulated}
-              onChange={(e) => setSimulated(e.target.checked)}
-            />
-            Use simulated reader
-          </label>
-          <button
-            type="button"
-            onClick={discoverReaders}
-            className="rounded border border-gray-300 px-3 py-2 text-sm font-semibold hover:bg-gray-100"
-          >
-            Discover Readers
-          </button>
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        {/* Status */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-lg font-bold mb-2">Reader Status</h2>
+          <p className={`text-sm ${connectedReader ? 'text-green-600' : 'text-yellow-600'}`}>
+            {connectedReader ? `✓ Connected to: ${readerLabel}` : status}
+          </p>
+          {error && <p className="text-red-600 text-sm mt-2">Error: {error}</p>}
         </div>
 
-        {discoveredReaders.length > 0 && (
-          <div className="mb-6 space-y-2">
-            {discoveredReaders.map((reader) => (
-              <div key={reader.id} className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm">
-                <div>
-                  <p className="font-semibold">{reader.label || reader.serial_number || reader.id}</p>
-                  <p className="text-gray-500">{reader.device_type || reader.location || 'Reader'}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => connectReader(reader)}
-                  className="rounded bg-gray-900 px-3 py-1.5 font-semibold text-white hover:bg-black"
-                >
-                  Connect
-                </button>
+        {/* Reader Discovery */}
+        {!connectedReader && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-lg font-bold mb-4">Connect a Reader</h2>
+
+            {/* Simulated / Real Toggle */}
+            <div className="mb-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={simulated}
+                  onChange={(e) => setSimulated(e.target.checked)}
+                  disabled={isBusy}
+                  className="rounded"
+                />
+                <span className="text-sm text-gray-700">Use Simulated Reader (for testing)</span>
+              </label>
+            </div>
+
+            {/* Discover Button */}
+            <button
+              onClick={discoverReaders}
+              disabled={isBusy}
+              className="w-full mb-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded-lg"
+            >
+              {isBusy ? 'Discovering...' : 'Discover Readers'}
+            </button>
+
+            {/* Discovered Readers */}
+            {discoveredReaders.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-700 font-semibold">Available Readers:</p>
+                {discoveredReaders.map((reader) => (
+                  <button
+                    key={reader.id}
+                    onClick={() => connectReader(reader)}
+                    disabled={isBusy}
+                    className="w-full text-left bg-gray-50 hover:bg-gray-100 disabled:bg-gray-200 border border-gray-300 rounded-lg p-3 font-medium text-gray-900"
+                  >
+                    {reader.label}
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
 
-        <div className="mb-4 rounded border border-gray-200 bg-white p-3 text-sm">
-          <p><strong>Connected Reader:</strong> {readerLabel || connectedReader?.label || 'None'}</p>
-        </div>
+        {/* Connected State */}
+        {connectedReader && (
+          <div className="bg-green-50 border-2 border-green-400 rounded-lg p-6">
+            <h2 className="text-2xl font-bold text-green-900 mb-4">✓ Reader Connected</h2>
+            <p className="text-green-800 mb-6">
+              The reader is ready. Staff can now scan tickets using the mobile scanner to initiate check-in or payments.
+            </p>
 
-        <button
-          type="button"
-          disabled={isBusy || !order || !connectedReader}
-          onClick={processTerminalPayment}
-          className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isBusy ? 'Processing...' : 'Collect Payment + Auto Check-In'}
-        </button>
+            <Link
+              href="/staff/scan"
+              className="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
+            >
+              📱 Go to Ticket Scanner
+            </Link>
 
-        <div className="mt-6 space-y-2 text-sm">
-          <p><strong>Status:</strong> {status}</p>
-          {error && <p className="text-red-600"><strong>Error:</strong> {error}</p>}
-        </div>
-      </div>
-    </main>
+            <div className="mt-6 pt-6 border-t border-green-300">
+              <p className="text-sm text-green-700">
+                <strong>Waiting for scans...</strong> Staff members with mobile devices can navigate to the scanner to begin check-ins.
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

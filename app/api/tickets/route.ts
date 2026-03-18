@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
       )
     `);
 
-    // Filter by email or order ID
     if (orderId) {
       query = query.eq('id', orderId);
     } else if (email) {
@@ -107,8 +106,9 @@ export async function GET(req: NextRequest) {
   // Support GET requests for accessibility
   const email = req.nextUrl.searchParams.get('email');
   const orderId = req.nextUrl.searchParams.get('orderId');
+  const checkInCode = req.nextUrl.searchParams.get('checkInCode');
 
-  const body = JSON.stringify({ email, orderId });
+  const body = JSON.stringify({ email, orderId, checkInCode });
 
   return POST(
     new NextRequest(req.nextUrl, {

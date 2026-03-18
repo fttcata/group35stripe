@@ -85,6 +85,33 @@ export async function createTickets(
 }
 
 /**
+ * Ensures all tickets have a check_in_code, backfilling any that are missing one.
+ */
+async function backfillCheckInCodes(tickets: Ticket[]): Promise<Ticket[]> {
+  if (!supabase) return tickets;
+
+  const needsCode = tickets.filter(t => !t.check_in_code);
+  if (needsCode.length === 0) return tickets;
+
+  const updated: Ticket[] = [...tickets];
+  for (const ticket of needsCode) {
+    const code = generateCheckInCode();
+    const { error } = await supabase
+      .from('tickets')
+      .update({ check_in_code: code })
+      .eq('id', ticket.id);
+
+    if (!error) {
+      const idx = updated.findIndex(t => t.id === ticket.id);
+      if (idx !== -1) updated[idx] = { ...updated[idx], check_in_code: code };
+    } else {
+      console.error(`Failed to backfill check_in_code for ticket ${ticket.id}:`, error);
+    }
+  }
+  return updated;
+}
+
+/**
  * Retrieves tickets for an order
  */
 export async function getTicketsByOrderId(orderId: string): Promise<Ticket[]> {
