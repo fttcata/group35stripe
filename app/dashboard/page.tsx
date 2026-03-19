@@ -20,6 +20,7 @@ type DashboardEvent = {
   ticketsRemaining: number
   totalCapacity: number
   revenue: number
+  ticketTypes?: Array<{ id: string; name: string; price?: number; totalQuantity: number; sold: number }>
 }
 
 type RecentActivity = {
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'published' | 'past'>('all')
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -68,7 +70,12 @@ export default function DashboardPage() {
           return
         }
 
-        const res = await fetch('/api/dashboard')
+        const res = await fetch('/api/dashboard', {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        })
         if (!res.ok) {
           const errData = await res.json()
           setError(errData.error || 'Failed to load dashboard')
@@ -276,7 +283,8 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {filteredEvents.map(event => (
-                    <div key={event.id} className="flex items-center gap-4 p-4 rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+                    <div key={event.id} className="flex flex-col gap-2 p-4 rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+                      <div className="flex items-center gap-4">
                       {event.images?.[0] ? (
                         <img src={event.images[0]} alt={event.title} className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
                       ) : (
@@ -315,6 +323,36 @@ export default function DashboardPage() {
                       >
                         Edit
                       </Link>
+                      <button
+                        onClick={() => setExpandedEventId(expandedEventId === event.id ? null : event.id)}
+                        className="ml-2 px-3 py-1.5 rounded-lg bg-gray-100 text-sm font-semibold hover:bg-gray-200"
+                      >
+                        {expandedEventId === event.id ? 'Hide analytics' : 'View analytics'}
+                      </button>
+                      </div>
+
+                      {expandedEventId === event.id && (
+                        <div className="mt-3 bg-gray-50 p-4 rounded border border-gray-100">
+                          <h4 className="font-semibold text-gray-800 mb-2">Ticket breakdown</h4>
+                          {event.ticketTypes && event.ticketTypes.length > 0 ? (
+                            <div className="space-y-2">
+                              {event.ticketTypes.map(tt => (
+                                <div key={tt.id} className="flex justify-between items-center">
+                                  <div>
+                                    <p className="font-medium text-gray-900">{tt.name}</p>
+                                    <p className="text-xs text-gray-500">Price: ${tt.price?.toFixed(2) || '0.00'}</p>
+                                  </div>
+                                  <div className="text-sm text-gray-700">
+                                    <span className="font-semibold">{tt.sold}</span> / {tt.totalQuantity}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500">No ticket type data available</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
