@@ -110,9 +110,11 @@ export async function GET(
 
     let stripeFeesTotal = 0;
     let netRevenue = totals.completedRevenue;
+    let payNowNetRevenue = totals.payNowRevenue;
 
     if (stripe && completedOrders.length > 0) {
       netRevenue = 0;
+      payNowNetRevenue = 0;
       for (const order of completedOrders) {
         const grossAmount = Number(order.total_amount || 0);
         if (isPayOnDay(order.payment_method)) {
@@ -139,8 +141,10 @@ export async function GET(
           const net = (balanceTx.net || 0) / 100;
           stripeFeesTotal += fee;
           netRevenue += net;
+          payNowNetRevenue += net;
         } catch {
           netRevenue += grossAmount;
+          payNowNetRevenue += grossAmount;
         }
       }
     }
@@ -204,7 +208,7 @@ export async function GET(
     const recentTransactions = allOrders.slice(0, 8);
 
     return NextResponse.json({
-      totals: { ...totals, deferredRevenue, stripeFeesTotal, netRevenue },
+      totals: { ...totals, deferredRevenue, stripeFeesTotal, netRevenue, payNowNetRevenue },
       revenueByType,
       salesTimeline,
       payMethodBreakdown,

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import StripeConnectButton from '@/app/account/StripeConnectButton'
 
 type TicketInfo = {
   name: string
@@ -32,6 +33,8 @@ export default function MyEventsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'published'>('all')
+  const [payoutConnected, setPayoutConnected] = useState(false)
+  const [payoutChecked, setPayoutChecked] = useState(false)
 
   useEffect(() => {
     loadAllEvents()
@@ -56,6 +59,14 @@ export default function MyEventsPage() {
         router.push('/')
         return
       }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_account_id')
+        .eq('id', user.id)
+        .single()
+      setPayoutConnected(Boolean(profile?.stripe_account_id))
+      setPayoutChecked(true)
 
       const { data, error: dbError } = await supabase
         .from('events')
@@ -240,6 +251,11 @@ export default function MyEventsPage() {
         )}
 
         {/* Stats */}
+        {payoutChecked && (
+          <div className="mb-6">
+            <StripeConnectButton connected={payoutConnected} />
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-lg p-6 shadow">
             <p className="text-gray-600 text-sm mb-1">Total Events</p>
