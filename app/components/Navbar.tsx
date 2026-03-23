@@ -85,6 +85,16 @@ export default function Navbar() {
                     <p className="text-xs text-gray-500 capitalize">{role || 'attendee'}</p>
                   </div>
 
+                  {user.email === 'admin@group35.com' && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-medium"
+                    >
+                      Admin Dashboard
+                    </Link>
+                  )}
+
                   <Link
                     href="/purchases/history"
                     onClick={() => setMenuOpen(false)}

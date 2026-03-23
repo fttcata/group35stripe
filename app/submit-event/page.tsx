@@ -47,7 +47,7 @@ export default function SubmitEventPage() {
   const [error, setError] = useState('')
   const [showPublishModal, setShowPublishModal] = useState(false)
   const [pendingPublish, setPendingPublish] = useState(false)
-  const [publishSuccess, setPublishSuccess] = useState(false)
+  const [publishSuccess, setPublishSuccess] = useState<{ id: string, title: string } | null>(null)
   const [dateWarning, setDateWarning] = useState('')
   const [venueWarning, setVenueWarning] = useState('')
   const isEditing = !!eventId
@@ -61,7 +61,8 @@ export default function SubmitEventPage() {
         return
       }
       const role = user.user_metadata?.role
-      if (role !== 'organizer') {
+      const isAdmin = user.email === 'admin@group35.com'
+      if (role !== 'organizer' && !isAdmin) {
         router.push('/')
         return
       }
@@ -393,7 +394,7 @@ export default function SubmitEventPage() {
         }
 
         if (publish) {
-          setPublishSuccess(true)
+          setPublishSuccess({ id: eventId!, title: formData.title })
         } else {
           router.push('/my-events')
         }
@@ -461,7 +462,7 @@ export default function SubmitEventPage() {
 
         // Redirect based on publish status
         if (publish) {
-          setPublishSuccess(true)
+          setPublishSuccess({ id: createdEvent.id, title: formData.title })
         } else {
           router.push('/drafts')
         }
@@ -497,6 +498,9 @@ export default function SubmitEventPage() {
   }
 
   if (publishSuccess) {
+    const slug = publishSuccess.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]/g, '')
+    const eventUrl = `/events/${slug}-${publishSuccess.id}`
+
     return (
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center space-y-6">
@@ -505,12 +509,20 @@ export default function SubmitEventPage() {
             <h1 className="text-3xl font-bold text-green-600">{isEditing ? 'Event Updated!' : 'Event Published!'}</h1>
             <p className="text-gray-600">{isEditing ? 'Your event has been successfully updated.' : 'Your event has been successfully published and is now live.'}</p>
           </div>
-          <button
-            onClick={() => router.push(isEditing ? '/my-events' : '/events')}
-            className="w-full rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700"
-          >
-            {isEditing ? 'Back to My Events' : 'View All Events'}
-          </button>
+          <div className="space-y-3">
+            <Link
+              href={eventUrl}
+              className="block w-full rounded-full bg-indigo-600 text-white py-3 font-semibold hover:bg-indigo-700 transition"
+            >
+              Go to Event Page
+            </Link>
+            <button
+              onClick={() => router.push(isEditing ? '/my-events' : '/events')}
+              className="w-full rounded-full bg-white border border-gray-300 text-gray-700 py-3 font-semibold hover:bg-gray-50 transition"
+            >
+              {isEditing ? 'Back to My Events' : 'View All Events'}
+            </button>
+          </div>
         </div>
       </main>
     )
