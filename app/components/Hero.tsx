@@ -7,9 +7,7 @@ export default function Hero() {
       <div className="max-w-4xl mx-auto px-4 py-16 sm:py-24">
         <div className="flex items-start gap-6">
           <div className="flex-shrink-0">
-            <Image src="/logo.jpg" alt="Eventify" width={96} height={96} className="rounded-md bg-white/5 object-contain" />
-          </div>
-
+              <Image src="/new_eventify_logo.png" alt="Eventify" width={96} height={96} className="rounded-md bg-white/5 object-contain" />
           <div className="max-w-xl">
             <h1 className="text-3xl font-extrabold sm:text-4xl lg:text-5xl">Discover events that spark curiosity</h1>
             <p className="mt-4 text-lg opacity-90">Browse local meetups, workshops, and talks—book seamlessly and join the community.</p>
