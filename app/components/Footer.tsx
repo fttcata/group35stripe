@@ -8,6 +8,8 @@ export default function Footer() {
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div className="flex items-center gap-4">
               <Image src="/new_eventify_logo.png" alt="Eventify" width={96} height={32} className="object-contain" />
+              <span className="text-xs text-gray-500">— Discover local events</span>
+          </div>
 
           <nav className="flex gap-4">
             <Link href="#" className="hover:underline">About</Link>
