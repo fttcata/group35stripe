@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -12,6 +12,7 @@ type SalesTotals = {
   deferredRevenue: number;
   stripeFeesTotal: number;
   netRevenue: number;
+  payNowNetRevenue: number;
 };
 
 type RevenueByType = {
@@ -78,6 +79,9 @@ function LineChart({ data }: { data: SalesTimelinePoint[] }) {
     return <div className="text-sm text-gray-500">No sales yet.</div>;
   }
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string } | null>(null);
+
   const max = Math.max(...data.map((d) => d.tickets_sold), 1);
   const width = 640;
   const height = 180;
@@ -89,15 +93,50 @@ function LineChart({ data }: { data: SalesTimelinePoint[] }) {
     return `${x},${y}`;
   });
 
+  const updateTooltip = (
+    event: React.MouseEvent<SVGElement, MouseEvent>,
+    label: string
+  ) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTooltip({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      label,
+    });
+  };
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full">
-      <polyline fill="none" stroke="#2563eb" strokeWidth="3" points={points.join(' ')} />
-      {data.map((point, index) => {
-        const x = padding + (index / Math.max(1, data.length - 1)) * (width - padding * 2);
-        const y = height - padding - (point.tickets_sold / max) * (height - padding * 2);
-        return <circle key={`${point.date}-${index}`} cx={x} cy={y} r="4" fill="#2563eb" />;
-      })}
-    </svg>
+    <div ref={containerRef} className="relative">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full">
+        <polyline fill="none" stroke="#2563eb" strokeWidth="3" points={points.join(' ')} />
+        {data.map((point, index) => {
+          const x = padding + (index / Math.max(1, data.length - 1)) * (width - padding * 2);
+          const y = height - padding - (point.tickets_sold / max) * (height - padding * 2);
+          const labelDate = formatDate(point.date);
+          const label = `${point.tickets_sold} ticket${point.tickets_sold === 1 ? '' : 's'} sold on ${labelDate}`;
+          return (
+            <g
+              key={`${point.date}-${index}`}
+              onMouseEnter={(event) => updateTooltip(event, label)}
+              onMouseMove={(event) => updateTooltip(event, label)}
+              onMouseLeave={() => setTooltip(null)}
+            >
+              <circle cx={x} cy={y} r="6" fill="#2563eb" />
+              <circle cx={x} cy={y} r="12" fill="transparent" pointerEvents="all" />
+            </g>
+          );
+        })}
+      </svg>
+      {tooltip && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-md bg-gray-900 px-2 py-1 text-xs text-white shadow"
+          style={{ left: tooltip.x + 8, top: tooltip.y + 8 }}
+        >
+          {tooltip.label}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -210,12 +249,12 @@ export default function EventSalesPage() {
             <p className="text-xl font-semibold text-gray-900">{formatCurrency(sales.totals.netRevenue)}</p>
           </div>
           <div className="rounded-xl bg-white p-4 shadow">
-            <p className="text-xs text-gray-500">Stripe Fees</p>
+            <p className="text-xs text-gray-500">Processing Fees</p>
             <p className="text-xl font-semibold text-gray-900">{formatCurrency(sales.totals.stripeFeesTotal)}</p>
           </div>
           <div className="rounded-xl bg-white p-4 shadow">
-            <p className="text-xs text-gray-500">Pay Now Revenue</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(sales.totals.payNowRevenue)}</p>
+            <p className="text-xs text-gray-500">Pay Now Revenue (Net)</p>
+            <p className="text-xl font-semibold text-gray-900">{formatCurrency(sales.totals.payNowNetRevenue)}</p>
           </div>
           <div className="rounded-xl bg-white p-4 shadow">
             <p className="text-xs text-gray-500">Pay on Day Revenue</p>

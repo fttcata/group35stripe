@@ -552,7 +552,6 @@ export default function SubmitEventPage() {
           <p className="text-gray-600 mb-6">
             {isEditing ? 'Update your event details' : 'Create and share your event with the community'}
           </p>
-
           <form className="space-y-6">
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 p-4">

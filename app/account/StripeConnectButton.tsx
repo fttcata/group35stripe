@@ -29,7 +29,7 @@ export default function StripeConnectButton({ connected }: Props) {
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Disconnect Stripe for payouts?')) return;
+    if (!confirm('Disconnect your payout account?')) return;
     setDisconnecting(true);
     setError('');
     try {
@@ -47,22 +47,22 @@ export default function StripeConnectButton({ connected }: Props) {
   };
 
   return (
-    <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-indigo-900">Stripe payouts</p>
+      <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+          <p className="text-sm font-semibold text-indigo-900">Payout setup</p>
           <p className="text-xs text-indigo-700">
-            {connected ? 'Stripe account connected.' : 'Connect Stripe to receive payouts.'}
+            {connected ? 'Payout account connected.' : 'Connect a payout account to receive earnings.'}
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleConnect}
-            disabled={loading}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-          >
-            {loading ? 'Starting...' : connected ? 'Manage Stripe' : 'Connect Stripe'}
-          </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleConnect}
+              disabled={loading}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+            {loading ? 'Starting...' : connected ? 'Manage payouts' : 'Set up payouts'}
+            </button>
           {connected && (
             <button
               onClick={handleDisconnect}
