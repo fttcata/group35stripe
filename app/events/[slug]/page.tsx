@@ -157,12 +157,11 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 px-4 py-16">
         <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg p-8 text-center space-y-4">
-          <div className="text-6xl mb-4">✅</div>
-          <h1 className="text-2xl font-bold text-green-600">Event Successfully Submitted!</h1>
-          <p className="text-gray-600">Your event has been created and will appear in the events list shortly.</p>
-          <Link href="/events" className="inline-flex items-center justify-center rounded-full bg-purple-600 text-white px-6 py-3 hover:bg-purple-700 font-semibold">
-            Back to Events
-          </Link>
+            <h1 className="text-2xl font-bold text-red-600">Event Not Found</h1>
+            <p className="text-gray-600">The event you are looking for does not exist or has been removed.</p>
+            <Link href="/events" className="inline-flex items-center justify-center rounded-full bg-purple-600 text-white px-6 py-3 hover:bg-purple-700 font-semibold">
+              Back to Events
+            </Link>
         </div>
       </main>
     )
