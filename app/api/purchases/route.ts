@@ -23,6 +23,7 @@ export async function GET() {
         event_id,
         total_amount,
         payment_status,
+        payment_method,
         created_at,
         events (
           id,
@@ -44,7 +45,7 @@ export async function GET() {
       `
       )
       .eq('user_id', user.id)
-      .in('payment_status', ['completed', 'completed_email_failed'])
+      .or('payment_status.in.(completed,completed_email_failed),payment_method.eq.pay-on-day')
       .order('created_at', { ascending: false });
 
     if (err1) {
@@ -62,6 +63,7 @@ export async function GET() {
           event_id,
           total_amount,
           payment_status,
+          payment_method,
           created_at,
           events (
             id,
@@ -83,7 +85,7 @@ export async function GET() {
         `
         )
         .eq('customer_email', email)
-        .in('payment_status', ['completed', 'completed_email_failed'])
+        .or('payment_status.in.(completed,completed_email_failed),payment_method.eq.pay-on-day')
         .order('created_at', { ascending: false });
 
       if (err2) {

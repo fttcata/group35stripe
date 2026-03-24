@@ -1,39 +1,41 @@
 import Link from 'next/link'
-import Image from 'next/image'
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-16 sm:py-24">
-        <div className="flex items-start gap-6">
-          <div className="flex-shrink-0">
-              <Image src="/new_eventify_logo.png" alt="Eventify" width={96} height={96} className="rounded-md bg-white/5 object-contain" />
-          </div>
+    <section className="relative overflow-hidden bg-slate-900 text-white">
+      {/* Subtle gradient overlay */}
+      <div aria-hidden className="absolute inset-0 bg-linear-to-br from-indigo-600/20 via-transparent to-amber-500/10" />
+      <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-200 h-150 bg-indigo-500/10 rounded-full blur-3xl" />
 
-          <div className="max-w-xl">
-            <h1 className="text-3xl font-extrabold sm:text-4xl lg:text-5xl">Discover events that spark curiosity</h1>
-            <p className="mt-4 text-lg opacity-90">Browse local meetups, workshops, and talks—book seamlessly and join the community.</p>
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 lg:py-32">
+        <div className="max-w-2xl">
+          <p className="text-indigo-400 font-semibold text-sm tracking-wide uppercase mb-4">Discover what&apos;s happening</p>
+          <h1 className="text-4xl font-extrabold sm:text-5xl lg:text-6xl leading-tight tracking-tight">
+            Find events that
+            <span className="block text-indigo-400">inspire you</span>
+          </h1>
+          <p className="mt-6 text-lg text-slate-300 leading-relaxed max-w-lg">
+            Browse local meetups, workshops, and talks. Book seamlessly and join a community of curious minds.
+          </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Link
-                href="/events"
-                className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-indigo-700 shadow hover:opacity-95"
-              >
-                Browse Events
-              </Link>
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Link
+              href="/events"
+              className="inline-flex items-center justify-center rounded-lg bg-indigo-500 hover:bg-indigo-400 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-indigo-400/30"
+            >
+              Browse Events
+              <svg className="ml-2 w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            </Link>
 
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center justify-center rounded-md border border-white/30 px-4 py-2 text-sm text-white/95 hover:bg-white/10"
-              >
-                How it works
-              </a>
-            </div>
+            <a
+              href="#how-it-works"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-600 px-5 py-3 text-sm font-medium text-slate-300 hover:text-white hover:border-slate-500 hover:bg-white/5 transition-all"
+            >
+              How it works
+            </a>
           </div>
         </div>
       </div>
-
-      <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-black/10 to-transparent mix-blend-overlay" />
     </section>
   )
 }

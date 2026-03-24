@@ -1,6 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+function isOrganizerRole(role: unknown) {
+  if (typeof role !== 'string') return false
+  const normalized = role.trim().toLowerCase()
+  return normalized === 'organizer' || normalized === 'organiser'
+}
+
 // Check if Supabase is configured
 const isSupabaseConfigured = () => {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
@@ -44,8 +50,19 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  let organizerUser = false
+  if (user?.id) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    organizerUser = isOrganizerRole(profile?.role || user.user_metadata?.role)
+  }
+
   // Protected routes — redirect to login if not authenticated
-  const protectedPaths = ['/submit-event', '/account', '/dashboard']
+  const protectedPaths = ['/submit-event', '/account', '/staff', '/organizer']
   const isProtected = protectedPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   )
@@ -65,7 +82,21 @@ export async function updateSession(request: NextRequest) {
 
   if (isAuthPage && user) {
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = organizerUser ? '/organizer' : '/'
+    return NextResponse.redirect(url)
+  }
+
+  // Organizer users should operate from the command center instead of attendee discovery/purchase flows.
+  const attendeeOnlyPaths = ['/', '/events', '/eventDetails', '/buy', '/purchases/history']
+  const isAttendeeOnlyPath = attendeeOnlyPaths.some((path) =>
+    path === '/'
+      ? request.nextUrl.pathname === '/'
+      : request.nextUrl.pathname.startsWith(path)
+  )
+
+  if (organizerUser && isAttendeeOnlyPath) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/organizer'
     return NextResponse.redirect(url)
   }
 

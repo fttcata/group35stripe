@@ -18,7 +18,7 @@ export default function FeaturedEvents() {
           const json = await res.json()
           if (json.events && json.events.length > 0) {
             const mapped: Event[] = json.events.map((ev: Record<string, unknown>) => ({
-              slug: (ev.title as string).toLowerCase().replace(/\s+/g, '-'),
+              slug: `${(ev.title as string).toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')}-${String(ev.id || '')}`,
               title: ev.title as string,
               description: (ev.description as string) || '',
               date: (ev.date as string).slice(0, 10),
@@ -45,17 +45,21 @@ export default function FeaturedEvents() {
   }, [])
 
   return (
-    <section className="py-12">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="mb-6 flex items-center justify-between">
+    <section className="py-16 sm:py-20 bg-white">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="mb-10 flex items-end justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Featured Events</h2>
-            <p className="text-sm text-gray-600">Hand-picked upcoming events you might like.</p>
+            <p className="text-sm font-semibold text-indigo-500 uppercase tracking-wide mb-2">Don&apos;t miss out</p>
+            <h2 className="text-3xl font-bold text-slate-900">Featured Events</h2>
+            <p className="mt-2 text-slate-500">Hand-picked upcoming events you won&apos;t want to miss.</p>
           </div>
-          <Link href="/events" className="text-sm font-medium text-indigo-600 hover:underline">See all</Link>
+          <Link href="/events" className="hidden sm:inline-flex items-center gap-1 text-sm font-semibold text-indigo-500 hover:text-indigo-600 transition-colors">
+            View all
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+          </Link>
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((e) => (
             <EventCard
               key={e.title}
@@ -69,6 +73,13 @@ export default function FeaturedEvents() {
               rating={e.rating}
             />
           ))}
+        </div>
+
+        <div className="mt-8 text-center sm:hidden">
+          <Link href="/events" className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-500 hover:text-indigo-600">
+            View all events
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+          </Link>
         </div>
       </div>
     </section>

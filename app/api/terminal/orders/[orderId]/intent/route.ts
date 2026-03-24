@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabase } from '../../../../../../lib/supabaseClient';
+import { canUserScanEvent, getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const terminalCurrency = (process.env.STRIPE_TERMINAL_CURRENCY || 'eur').toLowerCase();
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!stripe) {
       return NextResponse.json(
         { error: 'STRIPE_SECRET_KEY is not configured' },
@@ -22,15 +28,30 @@ export async function POST(
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
+    const body = await req.json().catch(() => ({}));
+    const selectedEventId = body?.selectedEventId;
+    if (!selectedEventId || typeof selectedEventId !== 'string') {
+      return NextResponse.json({ error: 'Selected event is required' }, { status: 400 });
+    }
+
     const { orderId } = await params;
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id,total_amount,payment_status,customer_email,event_id')
+      .select('id,event_id,total_amount,payment_status,customer_email')
       .eq('id', orderId)
       .single();
 
     if (orderError || !order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    const allowed = await canUserScanEvent(order.event_id, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
+    if (!order.event_id || order.event_id !== selectedEventId) {
+      return NextResponse.json({ error: 'This ticket belongs to a different event than the selected event' }, { status: 403 });
     }
 
     if (order.payment_status === 'completed') {
@@ -45,34 +66,6 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid order amount' }, { status: 400 });
     }
 
-    let transferData: Stripe.PaymentIntentCreateParams.TransferData | undefined;
-    let applicationFee: number | undefined;
-
-    if (order.event_id) {
-      const { data: eventRow } = await supabase
-        .from('events')
-        .select('created_by')
-        .eq('id', order.event_id)
-        .single();
-
-      if (eventRow?.created_by) {
-        const { data: profileRow } = await supabase
-          .from('profiles')
-          .select('stripe_account_id')
-          .eq('id', eventRow.created_by)
-          .single();
-
-        const destinationAccount = profileRow?.stripe_account_id?.trim();
-        if (destinationAccount) {
-          transferData = { destination: destinationAccount };
-          const feePercent = Number(process.env.PLATFORM_FEE_PERCENT || 0);
-          applicationFee = feePercent > 0
-            ? Math.round(amountCents * (feePercent / 100))
-            : undefined;
-        }
-      }
-    }
-
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: terminalCurrency,
@@ -82,8 +75,6 @@ export async function POST(
         order_id: orderId,
       },
       receipt_email: order.customer_email || undefined,
-      ...(transferData ? { transfer_data: transferData } : {}),
-      ...(applicationFee ? { application_fee_amount: applicationFee } : {}),
     });
 
     return NextResponse.json({

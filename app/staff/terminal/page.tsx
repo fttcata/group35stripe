@@ -90,22 +90,22 @@ export default function StaffTerminalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 antialiased">
-      <header className="bg-white border-b border-gray-200 p-4">
+    <div className="min-h-screen bg-slate-50 antialiased">
+      <header className="bg-white border-b border-slate-200 p-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Stripe Terminal Reader</h1>
-            <p className="text-gray-600 mt-1">Manage your payment reader connection</p>
+            <h1 className="text-3xl font-bold text-slate-900">Stripe Terminal Reader</h1>
+            <p className="text-slate-500 mt-1">Manage your payment reader connection</p>
           </div>
-          <Link href="/staff/scan" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
-            📱 Scan Tickets
+          <Link href="/staff" className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+            Scan Tickets
           </Link>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Status */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
           <h2 className="text-lg font-bold mb-2">Reader Status</h2>
           <p className={`text-sm ${connectedReader ? 'text-green-600' : 'text-yellow-600'}`}>
             {connectedReader ? `✓ Connected to: ${readerLabel}` : status}
@@ -115,7 +115,7 @@ export default function StaffTerminalPage() {
 
         {/* Reader Discovery */}
         {!connectedReader && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
             <h2 className="text-lg font-bold mb-4">Connect a Reader</h2>
 
             {/* Simulated / Real Toggle */}
@@ -128,7 +128,7 @@ export default function StaffTerminalPage() {
                   disabled={isBusy}
                   className="rounded"
                 />
-                <span className="text-sm text-gray-700">Use Simulated Reader (for testing)</span>
+                <span className="text-sm text-slate-600">Use Simulated Reader (for testing)</span>
               </label>
             </div>
 
@@ -136,7 +136,7 @@ export default function StaffTerminalPage() {
             <button
               onClick={discoverReaders}
               disabled={isBusy}
-              className="w-full mb-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded-lg"
+              className="w-full mb-4 bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-bold py-2 px-4 rounded-lg transition-colors"
             >
               {isBusy ? 'Discovering...' : 'Discover Readers'}
             </button>
@@ -144,13 +144,13 @@ export default function StaffTerminalPage() {
             {/* Discovered Readers */}
             {discoveredReaders.length > 0 && (
               <div className="space-y-2">
-                <p className="text-sm text-gray-700 font-semibold">Available Readers:</p>
+                <p className="text-sm text-slate-600 font-semibold">Available Readers:</p>
                 {discoveredReaders.map((reader) => (
                   <button
                     key={reader.id}
                     onClick={() => connectReader(reader)}
                     disabled={isBusy}
-                    className="w-full text-left bg-gray-50 hover:bg-gray-100 disabled:bg-gray-200 border border-gray-300 rounded-lg p-3 font-medium text-gray-900"
+                    className="w-full text-left bg-slate-50 hover:bg-slate-100 disabled:bg-slate-200 border border-slate-200 rounded-lg p-3 font-medium text-slate-900"
                   >
                     {reader.label}
                   </button>
@@ -169,7 +169,7 @@ export default function StaffTerminalPage() {
             </p>
 
             <Link
-              href="/staff/scan"
+              href="/staff"
               className="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg"
             >
               📱 Go to Ticket Scanner

@@ -1,4 +1,6 @@
 'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -32,6 +34,7 @@ export default function AdminDashboardClient({ profiles = [], events = [], order
   useEffect(() => {
     const tab = searchParams.get('tab') as 'overview' | 'events' | 'organizers' | 'attendees'
     if (tab && ['overview', 'events', 'organizers', 'attendees'].includes(tab)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab(tab)
     }
   }, [searchParams])

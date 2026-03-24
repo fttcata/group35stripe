@@ -35,19 +35,19 @@ export default function PublishConfirmationModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Publish Event?</h2>
+      <div className="bg-white rounded-xl border border-slate-200 max-w-md w-full mx-4 p-8">
+        <h2 className="text-2xl font-bold text-slate-900 mb-4">Publish Event?</h2>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <p className="text-sm text-blue-900">
+        <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 mb-6">
+          <p className="text-sm text-indigo-900">
             <strong>Event:</strong> {event.title}
           </p>
-          <p className="text-sm text-blue-900 mt-1">
+          <p className="text-sm text-indigo-900 mt-1">
             <strong>Date:</strong> {new Date(event.start_date).toLocaleDateString()}
           </p>
         </div>
 
-        <p className="text-gray-600 mb-6">
+        <p className="text-slate-500 mb-6">
           Once published, this event will be visible to the public and tickets can be purchased.
         </p>
 
@@ -61,14 +61,14 @@ export default function PublishConfirmationModal({
           <button
             onClick={onCancel}
             disabled={isPublishing}
-            className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-900 font-semibold hover:bg-gray-50 disabled:opacity-50"
+            className="flex-1 px-4 py-2 rounded-lg border border-slate-200 text-slate-900 font-semibold hover:bg-slate-50 disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={isPublishing}
-            className="flex-1 px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 disabled:opacity-50"
+            className="flex-1 px-4 py-2 rounded-lg bg-indigo-500 text-white font-semibold hover:bg-indigo-600 disabled:opacity-50 transition-colors"
           >
             {isPublishing ? 'Publishing...' : 'Publish'}
           </button>

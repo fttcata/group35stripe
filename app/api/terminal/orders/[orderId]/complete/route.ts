@@ -3,12 +3,14 @@ import Stripe from 'stripe';
 import { supabase } from '../../../../../../lib/supabaseClient';
 import { createTickets, getTicketsByOrderId } from '../../../../../../lib/ticketService';
 import { sendTicketConfirmationEmail } from '../../../../../../lib/emailService';
+import { canUserScanEvent, getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
 interface CompleteTerminalPaymentBody {
   paymentIntentId?: string;
+  selectedEventId?: string;
 }
 
 export async function POST(
@@ -16,6 +18,11 @@ export async function POST(
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!stripe) {
       return NextResponse.json(
         { error: 'STRIPE_SECRET_KEY is not configured' },
@@ -30,6 +37,10 @@ export async function POST(
     const body: CompleteTerminalPaymentBody = await req.json().catch(() => ({}));
     if (!body.paymentIntentId) {
       return NextResponse.json({ error: 'paymentIntentId is required' }, { status: 400 });
+    }
+
+    if (!body.selectedEventId || typeof body.selectedEventId !== 'string') {
+      return NextResponse.json({ error: 'Selected event is required' }, { status: 400 });
     }
 
     const { orderId } = await params;
@@ -54,6 +65,15 @@ export async function POST(
 
     if (orderError || !order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    const allowed = await canUserScanEvent(order.event_id, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
+    if (!order.event_id || order.event_id !== body.selectedEventId) {
+      return NextResponse.json({ error: 'This ticket belongs to a different event than the selected event' }, { status: 403 });
     }
 
     const { data: orderItems } = await supabase
@@ -106,6 +126,7 @@ export async function POST(
       if (orderItems && orderItems.length > 0) {
         for (const item of orderItems) {
           const qty = Math.max(1, Number(item.quantity) || 1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const ticketTypesObj = item.ticket_types as any;
             const ticketTypeName = ticketTypesObj?.name || (Array.isArray(ticketTypesObj) ? ticketTypesObj[0]?.name : undefined) || 'Standard';
           const created = await createTickets(orderId, eventTitle, ticketTypeName, qty);

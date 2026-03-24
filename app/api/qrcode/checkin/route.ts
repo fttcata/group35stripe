@@ -1,13 +1,26 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '../../../../lib/supabaseClient';
+import { canUserScanEvent, getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 export async function POST(req: NextRequest) {
   try {
-    const { orderId } = await req.json();
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { orderId, selectedEventId } = await req.json();
 
     if (!orderId || typeof orderId !== 'string') {
       return NextResponse.json(
         { error: 'Invalid order ID' },
+        { status: 400 }
+      );
+    }
+
+    if (!selectedEventId || typeof selectedEventId !== 'string') {
+      return NextResponse.json(
+        { error: 'Selected event is required' },
         { status: 400 }
       );
     }
@@ -24,6 +37,7 @@ export async function POST(req: NextRequest) {
       .from('orders')
       .select(`
         id,
+        event_id,
         payment_status,
         total_amount,
         tickets (
@@ -41,8 +55,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const allowed = await canUserScanEvent(order.event_id, user.id);
+    if (!allowed) {
+      return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });
+    }
+
+    if (!order.event_id || order.event_id !== selectedEventId) {
+      return NextResponse.json({ error: 'This ticket belongs to a different event than the selected event' }, { status: 403 });
+    }
+
     const isPaid = order.payment_status === 'completed' || order.payment_status === 'paid';
     const tickets = order.tickets || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const alreadyUsed = tickets.some((t: any) => t.is_used);
 
     // If already checked in
@@ -55,6 +79,7 @@ export async function POST(req: NextRequest) {
 
     // If paid, mark all tickets as used
     if (isPaid) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ticketIds = tickets.map((t: any) => t.id);
       const { error: updateError } = await supabase
         .from('tickets')

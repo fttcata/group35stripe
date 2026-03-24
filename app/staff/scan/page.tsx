@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react';
 import { loadStripeTerminal } from '@stripe/terminal-js';
 import type { Reader, Terminal } from '@stripe/terminal-js';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import jsQR from 'jsqr';
 
 interface ScannedTicket {
   ticketCode: string;
   orderId: string;
+  eventId?: string;
   customerName?: string;
   eventTitle?: string;
   paymentStatus: string;
@@ -17,19 +19,37 @@ interface ScannedTicket {
   tickets: Array<{ id: string; is_used: boolean }>;
 }
 
-export default function StaffScanPage() {
+interface StaffEvent {
+  eventId: string;
+  title: string;
+  startDate: string | null;
+  venue: string | null;
+}
+
+export default function StaffScanPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <StaffScanPage />
+    </Suspense>
+  );
+}
+
+function StaffScanPage() {
+  const searchParams = useSearchParams();
+  const selectedEventId = (searchParams.get('eventId') || '').trim();
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const scanInFlightRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const barcodeDetectorRef = useRef<any>(null);
 
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [connectedReader, setConnectedReader] = useState<Reader | null>(null);
   const [discoveredReaders, setDiscoveredReaders] = useState<Reader[]>([]);
-  const [simulated, setSimulated] = useState(true);
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [discoveringReaders, setDiscoveringReaders] = useState(false);
   const [connectingReader, setConnectingReader] = useState(false);
@@ -39,6 +59,10 @@ export default function StaffScanPage() {
   const [scannedData, setScannedData] = useState<ScannedTicket | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [staffAccessLoading, setStaffAccessLoading] = useState(true);
+  const [hasStaffAccess, setHasStaffAccess] = useState(false);
+  const [staffEvents, setStaffEvents] = useState<StaffEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<StaffEvent | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [manualTicketCode, setManualTicketCode] = useState('');
@@ -90,7 +114,33 @@ export default function StaffScanPage() {
     };
   }, []);
 
-  async function discoverReaders() {
+  useEffect(() => {
+    const loadStaffAccess = async () => {
+      try {
+        const response = await fetch('/api/staff/my-events');
+        if (!response.ok) {
+          setHasStaffAccess(false);
+          return;
+        }
+        const data = await response.json();
+        const events = Array.isArray(data.events) ? (data.events as StaffEvent[]) : [];
+        setStaffEvents(events);
+        setHasStaffAccess(events.length > 0);
+        if (selectedEventId) {
+          const matched = events.find((e) => e.eventId === selectedEventId) || null;
+          setSelectedEvent(matched);
+        }
+      } catch {
+        setHasStaffAccess(false);
+      } finally {
+        setStaffAccessLoading(false);
+      }
+    };
+
+    loadStaffAccess();
+  }, [selectedEventId]);
+
+  const discoverReaders = useCallback(async () => {
     if (!terminal) {
       setTerminalError('Terminal is not initialized yet.');
       return;
@@ -99,7 +149,7 @@ export default function StaffScanPage() {
     setDiscoveringReaders(true);
     try {
       setTerminalError(null);
-      const result = await terminal.discoverReaders({ simulated });
+      const result = await terminal.discoverReaders({ simulated: false });
       if ('error' in result) throw new Error(result.error.message);
       setDiscoveredReaders(result.discoveredReaders || []);
     } catch (err) {
@@ -107,7 +157,22 @@ export default function StaffScanPage() {
     } finally {
       setDiscoveringReaders(false);
     }
-  }
+  }, [terminal]);
+
+  useEffect(() => {
+    if (!terminal || connectedReader) return;
+
+    discoverReaders();
+    const intervalId = window.setInterval(() => {
+      if (!connectedReader) {
+        discoverReaders();
+      }
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [terminal, connectedReader, discoverReaders]);
 
   async function connectReader(reader: Reader) {
     if (!terminal) {
@@ -185,6 +250,7 @@ export default function StaffScanPage() {
 
   const playDuplicateAlertBeep = async () => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextCtor) return;
 
@@ -330,6 +396,7 @@ export default function StaffScanPage() {
 
     // Try native BarcodeDetector first when available.
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const BarcodeDetectorCtor = (globalThis as any).BarcodeDetector;
       if (BarcodeDetectorCtor) {
         if (!barcodeDetectorRef.current) {
@@ -389,6 +456,7 @@ export default function StaffScanPage() {
       // QR contains format: TICKET-YYYYMMDD-XXXXXX|Event Title|timestamp
       const parts = qrData.split('|');
       const ticketCode = parts[0];
+      const eventTitleHint = parts[1]?.trim() || undefined;
 
       if (!ticketCode || !ticketCode.startsWith('TICKET-')) {
         throw new Error('Invalid QR code format');
@@ -397,7 +465,7 @@ export default function StaffScanPage() {
       const response = await fetch('/api/qrcode/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketCode }),
+        body: JSON.stringify({ ticketCode, eventTitleHint, selectedEventId }),
       });
 
       const data = await response.json();
@@ -431,7 +499,7 @@ export default function StaffScanPage() {
       const response = await fetch('/api/qrcode/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: scannedData.orderId }),
+        body: JSON.stringify({ orderId: scannedData.orderId, selectedEventId }),
       });
 
       const data = await response.json();
@@ -469,6 +537,8 @@ export default function StaffScanPage() {
     try {
       const intentResponse = await fetch(`/api/terminal/orders/${scannedData.orderId}/intent`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectedEventId }),
       });
       const intentData = await intentResponse.json();
 
@@ -489,7 +559,7 @@ export default function StaffScanPage() {
       const completeResponse = await fetch(`/api/terminal/orders/${scannedData.orderId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentIntentId: processResult.paymentIntent.id }),
+        body: JSON.stringify({ paymentIntentId: processResult.paymentIntent.id, selectedEventId }),
       });
 
       const completeData = await completeResponse.json();
@@ -520,53 +590,108 @@ export default function StaffScanPage() {
     await handleQRScanned(code);
   };
 
+  if (staffAccessLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 text-slate-900 grid place-items-center px-4">
+        <p className="text-slate-600">Checking staff access...</p>
+      </div>
+    );
+  }
+
+  if (!hasStaffAccess) {
+    return (
+      <div className="min-h-screen bg-slate-100 text-slate-900 grid place-items-center px-4">
+        <div className="max-w-lg w-full rounded-2xl border border-slate-200 bg-white p-6">
+          <h1 className="text-2xl font-bold">Staff access required</h1>
+          <p className="mt-2 text-slate-600">
+            Your account is not activated for event staff scanning yet. Enter your staff invite code in Account to unlock scanner access.
+          </p>
+          <div className="mt-4 flex gap-3">
+            <Link href="/account" className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2">
+              Go to Account
+            </Link>
+            <Link href="/" className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold px-4 py-2">
+              Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedEventId) {
+    return (
+      <div className="min-h-screen bg-slate-100 text-slate-900 grid place-items-center px-4">
+        <div className="max-w-lg w-full rounded-2xl border border-slate-200 bg-white p-6">
+          <h1 className="text-2xl font-bold">Select an event first</h1>
+          <p className="mt-2 text-slate-600">Choose the event you are scanning for from the staff page.</p>
+          <div className="mt-4">
+            <Link href="/staff" className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 inline-block">
+              Go to Staff Events
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedEvent) {
+    return (
+      <div className="min-h-screen bg-slate-100 text-slate-900 grid place-items-center px-4">
+        <div className="max-w-lg w-full rounded-2xl border border-slate-200 bg-white p-6">
+          <h1 className="text-2xl font-bold">Event not available</h1>
+          <p className="mt-2 text-slate-600">You do not have scanner access for this event. Pick one of your assigned events.</p>
+          <div className="mt-4">
+            <Link href="/staff" className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2 inline-block">
+              Back to Staff Events
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 antialiased text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 backdrop-blur p-4">
+    <div className="min-h-screen bg-slate-100 antialiased text-slate-900">
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white p-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Staff Mobile</p>
-            <h1 className="text-2xl font-black">Rapid Ticket Scan</h1>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Staff Scanner</p>
+            <h1 className="text-2xl font-bold text-slate-900">Event Ticket Scanner</h1>
+            <p className="text-sm text-slate-600 mt-1">{selectedEvent.title}</p>
           </div>
-          <Link href="/staff" className="text-cyan-300 hover:text-cyan-200 font-semibold text-sm">
-            Main Staff Console
+          <Link href="/staff" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50 font-semibold text-sm">
+            Change Event
           </Link>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <section className="mb-5 rounded-2xl border border-slate-700 bg-slate-900 p-4">
+        <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-200">1) Connect Reader Once</p>
-              <p className="text-xs text-slate-400 mt-1">
-                Wireless reader stays connected while you scan and process each ticket.
+              <p className="text-sm font-semibold text-slate-900">Reader Status</p>
+              <p className="text-xs text-slate-600 mt-1">
+                Scanner auto-discovers your Stripe reader and keeps it connected while you process guests.
               </p>
             </div>
-            <span className={`text-xs font-bold px-3 py-1 rounded-full ${connectedReader ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-600/20 text-amber-300 border border-amber-500/40'}`}>
+            <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${connectedReader ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
               {connectedReader ? `Connected: ${connectedReader.label}` : 'Not connected'}
             </span>
           </div>
 
           {!connectedReader && (
             <div className="mt-4 space-y-3">
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={simulated}
-                  onChange={(e) => setSimulated(e.target.checked)}
-                  disabled={discoveringReaders || connectingReader}
-                  className="rounded"
-                />
-                Use simulated reader (test mode)
-              </label>
+              <p className="text-sm text-slate-600">
+                Looking for real Stripe readers on this network.
+              </p>
 
               <button
                 onClick={discoverReaders}
                 disabled={discoveringReaders || connectingReader}
-                className="w-full rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-400 text-slate-950 font-bold py-3"
+                className="w-full rounded-lg bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 text-white font-semibold py-3"
               >
-                {discoveringReaders ? 'Discovering readers...' : 'Discover Readers'}
+                {discoveringReaders ? 'Discovering readers...' : 'Refresh Reader Search'}
               </button>
 
               {discoveredReaders.length > 0 && (
@@ -576,7 +701,7 @@ export default function StaffScanPage() {
                       key={reader.id}
                       onClick={() => connectReader(reader)}
                       disabled={connectingReader}
-                      className="w-full text-left rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-4 py-3 font-semibold"
+                      className="w-full text-left rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 px-4 py-3 font-semibold text-slate-800"
                     >
                       {connectingReader ? 'Connecting...' : `Connect ${reader.label}`}
                     </button>
@@ -587,13 +712,13 @@ export default function StaffScanPage() {
           )}
 
           {terminalError && (
-            <p className="mt-3 text-sm text-rose-300">Reader error: {terminalError}</p>
+            <p className="mt-3 text-sm text-rose-700">Reader error: {terminalError}</p>
           )}
         </section>
 
         {/* Camera Feed */}
         <div className="mb-6">
-          <div className="relative bg-black rounded-2xl overflow-hidden mb-4 border border-slate-700 min-h-85">
+          <div className="relative bg-black rounded-2xl overflow-hidden mb-4 border border-slate-300 min-h-85">
             <video
               ref={videoRef}
               autoPlay
@@ -604,15 +729,15 @@ export default function StaffScanPage() {
               className="w-full h-[66vh] max-h-160 object-cover"
             />
             <canvas ref={canvasRef} hidden width="300" height="300" />
-            <div className="absolute inset-0 border-4 border-cyan-400 m-10 rounded-xl pointer-events-none">
-              <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-cyan-500/20" />
+            <div className="absolute inset-0 border-2 border-white/70 m-10 rounded-xl pointer-events-none">
+              <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-white/10" />
             </div>
 
             {!cameraActive && (
-              <div className="absolute inset-0 grid place-items-center bg-slate-950/70 p-4">
+              <div className="absolute inset-0 grid place-items-center bg-black/45 p-4">
                 <button
                   onClick={startCamera}
-                  className="w-full max-w-sm rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-5 px-6 text-xl"
+                  className="w-full max-w-sm rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold py-4 px-6 text-lg"
                 >
                   Start Camera and Scan
                 </button>
@@ -620,18 +745,18 @@ export default function StaffScanPage() {
             )}
 
             {cameraActive && !videoReady && (
-              <div className="absolute inset-0 grid place-items-center bg-slate-950/60 p-4 text-center">
-                <p className="text-slate-200 text-sm font-semibold mb-3">Starting live camera feed...</p>
+              <div className="absolute inset-0 grid place-items-center bg-black/45 p-4 text-center">
+                <p className="text-white text-sm font-medium mb-3">Starting live camera feed...</p>
                 <button
                   onClick={startPreviewPlayback}
-                  className="rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 px-4"
+                  className="rounded-lg bg-white hover:bg-slate-100 text-slate-900 font-semibold py-2 px-4"
                 >
                   Start Live Feed
                 </button>
               </div>
             )}
 
-            <div className="absolute top-3 left-3 rounded-full px-3 py-1 text-xs font-bold bg-slate-950/70 text-cyan-200 border border-cyan-500/40">
+            <div className="absolute top-3 left-3 rounded-full px-3 py-1 text-xs font-semibold bg-black/50 text-white border border-white/30">
               {!cameraActive
                 ? 'Live camera not started'
                 : scanning
@@ -645,20 +770,20 @@ export default function StaffScanPage() {
           {cameraActive && (
             <button
               onClick={stopCamera}
-              className="w-full rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-4"
+              className="w-full rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold py-3 px-4"
             >
               Stop Camera
             </button>
           )}
 
           {error && (
-            <div className="mt-4 bg-rose-950/50 border border-rose-700 text-rose-200 px-4 py-3 rounded-xl">
+            <div className="mt-4 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg">
               {error}
             </div>
           )}
 
-          <div className="mt-4 bg-slate-900 border border-slate-700 rounded-xl p-4">
-            <p className="text-sm text-slate-300 mb-2">Manual code entry</p>
+          <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
+            <p className="text-sm text-slate-700 mb-2">Manual code entry</p>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -666,12 +791,12 @@ export default function StaffScanPage() {
                 onChange={(e) => setManualTicketCode(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitManualCode()}
                 placeholder="TICKET-YYYYMMDD-XXXXXX"
-                className="flex-1 px-3 py-2 rounded bg-slate-950 border border-slate-700 text-slate-100"
+                className="flex-1 px-3 py-2 rounded border border-slate-300 text-slate-900"
               />
               <button
                 onClick={submitManualCode}
                 disabled={loading}
-                className="bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-bold py-2 px-4 rounded"
+                className="bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 text-white font-semibold py-2 px-4 rounded"
               >
                 Submit
               </button>
@@ -679,7 +804,7 @@ export default function StaffScanPage() {
           </div>
 
           {loading && (
-            <div className="mt-4 text-center text-cyan-300">
+            <div className="mt-4 text-center text-slate-600">
               <p>Scanning...</p>
             </div>
           )}
@@ -688,22 +813,22 @@ export default function StaffScanPage() {
 
         {/* Scanned Ticket Details */}
         {scannedData && (
-          <div ref={resultRef} className="rounded-2xl border border-slate-700 bg-slate-900 p-6 sm:p-8">
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-3">2) Resolve Ticket</p>
+          <div ref={resultRef} className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-3">Resolve Ticket</p>
             <div className="mb-6">
-              <h2 className="text-3xl font-black mb-2">
+              <h2 className="text-3xl font-bold mb-2 text-slate-900">
                 {scannedData.customerName || 'Customer'}
               </h2>
-              <p className="text-slate-400">{scannedData.eventTitle}</p>
+              <p className="text-slate-600">{scannedData.eventTitle}</p>
             </div>
 
             {/* Status Badge */}
             <div className={`mb-6 p-4 rounded-xl border-2 ${
               scannedData.tickets.some(t => t.is_used)
-                ? 'bg-cyan-950/40 border-cyan-600 text-cyan-200'
+                ? 'bg-slate-100 border-slate-300 text-slate-800'
                 : scannedData.isPaid
-                ? 'bg-emerald-950/40 border-emerald-600 text-emerald-200'
-                : 'bg-amber-950/40 border-amber-600 text-amber-200'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-amber-50 border-amber-200 text-amber-800'
             }`}>
               <p className="font-bold text-lg">
                 {scannedData.tickets.some(t => t.is_used)
@@ -712,15 +837,15 @@ export default function StaffScanPage() {
                   ? 'Paid: ready to check in'
                   : `Outstanding Balance: EUR ${scannedData.totalAmount.toFixed(2)}`}
               </p>
-              <p className="text-sm mt-1 text-slate-300">
+              <p className="text-sm mt-1 text-slate-600">
                 Reader display is synced for this ticket.
               </p>
             </div>
 
             {/* Ticket Info */}
-            <div className="mb-6 bg-slate-950 p-4 rounded-xl border border-slate-700">
-              <p className="text-sm text-slate-400 mb-1">Ticket Code</p>
-              <p className="font-mono font-bold text-lg text-cyan-300">{scannedData.ticketCode}</p>
+            <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <p className="text-sm text-slate-500 mb-1">Ticket Code</p>
+              <p className="font-mono font-bold text-lg text-slate-900">{scannedData.ticketCode}</p>
             </div>
 
             {/* Already Used Check */}
@@ -738,7 +863,7 @@ export default function StaffScanPage() {
                 <button
                   onClick={handleCheckIn}
                   disabled={loading}
-                  className="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black py-4 px-4 text-lg"
+                  className="w-full rounded-lg bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 text-white font-semibold py-4 px-4 text-lg"
                 >
                   {loading ? 'Processing...' : 'Check In and Scan Next'}
                 </button>
@@ -748,7 +873,7 @@ export default function StaffScanPage() {
                 <button
                   onClick={handleCollectPaymentAndCheckIn}
                   disabled={processingPayment || loading || !connectedReader}
-                  className="w-full rounded-xl bg-amber-500 hover:bg-amber-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black py-4 px-4 text-lg"
+                  className="w-full rounded-lg bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-500 text-white font-semibold py-4 px-4 text-lg"
                 >
                   {processingPayment ? 'Collecting payment...' : 'Collect on Terminal and Check In'}
                 </button>
@@ -757,7 +882,7 @@ export default function StaffScanPage() {
               <button
                 onClick={resetScan}
                 disabled={loading || processingPayment}
-                className="w-full rounded-xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 text-slate-100 font-bold py-4 px-4 text-lg"
+                className="w-full rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 text-slate-800 font-semibold py-4 px-4 text-lg"
               >
                 Scan Next
               </button>

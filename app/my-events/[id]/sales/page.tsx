@@ -75,12 +75,12 @@ function formatDate(value: string) {
 }
 
 function LineChart({ data }: { data: SalesTimelinePoint[] }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string } | null>(null);
+
   if (data.length === 0) {
     return <div className="text-sm text-gray-500">No sales yet.</div>;
   }
-
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string } | null>(null);
 
   const max = Math.max(...data.map((d) => d.tickets_sold), 1);
   const width = 640;

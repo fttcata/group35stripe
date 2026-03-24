@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { supabase } from '../../../lib/supabaseClient';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { isAuthenticatedOrganizer } from '@/lib/organizerGuard';
 
 // Check if Stripe is configured
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -26,6 +27,7 @@ interface CheckoutRequest {
     price?: number;
     quantity: number;
   }>;
+  ticketBreakdown?: string;
   // Guest checkout fields
   isGuest?: boolean;
   guestName?: string;
@@ -37,6 +39,13 @@ interface CheckoutRequest {
 
 export async function POST(req: NextRequest) {
   try {
+    if (await isAuthenticatedOrganizer()) {
+      return NextResponse.json(
+        { error: 'Organizers cannot buy tickets. Use an attendee account to purchase tickets.' },
+        { status: 403 }
+      );
+    }
+
     // Check if Stripe is configured
     if (!stripe) {
       return NextResponse.json(
@@ -133,6 +142,7 @@ export async function POST(req: NextRequest) {
         eventDate,
         eventId,
         quantity: quantity.toString(),
+        ticketBreakdown: body.ticketBreakdown || '',
         isGuest: isGuest.toString(),
         guestName,
         guestEmail,

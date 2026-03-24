@@ -198,7 +198,9 @@ export async function GET() {
         ticketsRemaining,
         revenue: revenueByEvent[e.id] || 0,
         ticketTypes: (ticketTypes || [])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .filter((tt: any) => tt.event_id === e.id)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .map((tt: any) => ({
             id: tt.id,
             name: tt.name,

@@ -54,17 +54,17 @@ export default function MyTicketsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 antialiased">
+    <div className="min-h-screen bg-slate-50 antialiased">
       <main className="max-w-2xl mx-auto px-4 py-16">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h1 className="text-3xl font-bold mb-2">🎫 My Tickets</h1>
-          <p className="text-gray-600 mb-8">
+        <div className="bg-white rounded-xl border border-slate-200 p-8">
+          <h1 className="text-3xl font-bold mb-2">My Tickets</h1>
+          <p className="text-slate-500 mb-8">
             Retrieve your event tickets by email address or order ID
           </p>
 
           <form onSubmit={handleRetrieveTickets} className="space-y-4 mb-8">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
                 Email Address
               </label>
               <input
@@ -72,18 +72,18 @@ export default function MyTicketsPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="your.email@example.com"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               />
             </div>
 
             <div className="flex items-center gap-4">
               <div className="flex-1">
-                <span className="text-sm text-gray-500">OR</span>
+                <span className="text-sm text-slate-400">OR</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
                 Order ID
               </label>
               <input
@@ -91,14 +91,14 @@ export default function MyTicketsPage() {
                 value={orderId}
                 onChange={(e) => setOrderId(e.target.value)}
                 placeholder="Enter your order ID"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg transition"
+              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-300 text-white font-bold py-3 px-4 rounded-lg transition-colors"
             >
               {loading ? 'Retrieving...' : 'Retrieve Tickets'}
             </button>
@@ -113,9 +113,9 @@ export default function MyTicketsPage() {
           {tickets.length > 0 && (
             <div>
               {eventInfo && (
-                <div className="bg-gray-50 p-6 rounded-lg mb-6">
+                <div className="bg-slate-50 p-6 rounded-lg mb-6">
                   <h2 className="text-xl font-bold mb-4">{eventInfo.title}</h2>
-                  <div className="space-y-2 text-sm text-gray-600">
+                  <div className="space-y-2 text-sm text-slate-500">
                     {eventInfo.date && (
                       <p>
                         <strong>Date:</strong>{' '}
@@ -140,18 +140,18 @@ export default function MyTicketsPage() {
                 {tickets.map((ticket, index) => (
                   <div
                     key={index}
-                    className="border border-gray-300 rounded-lg p-6 bg-gray-50"
+                    className="border border-slate-200 rounded-lg p-6 bg-slate-50"
                   >
                     <div className="flex justify-between items-center mb-4">
                       <h4 className="font-bold text-lg">Ticket {index + 1}</h4>
-                      <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+                      <span className="bg-indigo-500 text-white px-3 py-1 rounded-lg text-sm">
                         {ticket.ticket_type}
                       </span>
                     </div>
 
-                    <div className="mb-4 p-3 bg-white rounded border border-gray-200">
-                      <p className="text-xs text-gray-600 mb-1">Ticket Code</p>
-                      <p className="font-mono text-base font-bold text-blue-600">
+                    <div className="mb-4 p-3 bg-white rounded border border-slate-200">
+                      <p className="text-xs text-slate-500 mb-1">Ticket Code</p>
+                      <p className="font-mono text-base font-bold text-indigo-600">
                         {ticket.ticket_code}
                       </p>
                     </div>
@@ -160,9 +160,9 @@ export default function MyTicketsPage() {
                       <img
                         src={ticket.qr_code_data}
                         alt={`QR Code for Ticket ${index + 1}`}
-                        className="w-48 h-48 mx-auto border border-gray-300 rounded"
+                        className="w-48 h-48 mx-auto border border-slate-200 rounded"
                       />
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-slate-400 mt-2">
                         Scan at event entry
                       </p>
                     </div>
@@ -170,9 +170,9 @@ export default function MyTicketsPage() {
                 ))}
               </div>
 
-              <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="font-bold text-blue-900 mb-2">📋 Tip:</h4>
-                <p className="text-sm text-blue-800">
+              <div className="mt-8 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                <h4 className="font-bold text-indigo-900 mb-2">Tip:</h4>
+                <p className="text-sm text-indigo-700">
                   Save or screenshot these tickets for your records. You can use either the
                   ticket code or QR code at the event.
                 </p>
@@ -181,15 +181,15 @@ export default function MyTicketsPage() {
           )}
 
           {!error && tickets.length === 0 && !loading && (
-            <div className="text-center text-gray-500 py-8">
+            <div className="text-center text-slate-400 py-8">
               <p>Enter your email or order ID to view your tickets</p>
             </div>
           )}
 
-          <div className="mt-8 pt-6 border-t border-gray-200">
+          <div className="mt-8 pt-6 border-t border-slate-200">
             <Link
               href="/"
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="text-indigo-500 hover:text-indigo-600 font-medium"
             >
               ← Back to Home
             </Link>

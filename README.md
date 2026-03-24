@@ -23,6 +23,8 @@ A full-stack web application for creating, managing, and selling tickets for ath
 - **Attendee Lookup** — Search attendees by name, email, or ticket ID
 - **QR Code Scanning** — Scan ticket QR codes for quick check-in
 - **On-site Payments** — Process "Pay on Day" tickets at check-in
+- **Invite Code Activation** — Activate staff scanner access from the account page using an emailed code
+- **Event-Scoped Permissions** — Staff can only scan tickets for events they are assigned to
 
 ## Tech Stack
 
@@ -87,6 +89,8 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ### 4. Set up the database
 
 Run the schema in your Supabase SQL editor (located at `db/schema.sql`).
+
+Run the event staff extension script (located at `db/event_staff.sql`) to enable event staff invites and activation.
 
 Optionally seed with sample data:
 

@@ -133,33 +133,33 @@ export default function DraftsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading your drafts...</div>
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-500">Loading your drafts...</div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-slate-50">
       <div className="max-w-4xl mx-auto px-4 py-10">
         <div className="flex justify-between items-center mb-8">
-          <Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">
+          <Link href="/events" className="text-sm text-indigo-500 hover:text-indigo-600">
             ← Back to Events
           </Link>
-          <Link href="/my-events" className="text-sm text-purple-700 hover:text-purple-900 font-semibold">
+          <Link href="/my-events" className="text-sm text-indigo-500 hover:text-indigo-600 font-semibold">
             My Events
           </Link>
         </div>
 
-        <div className="mt-8 bg-white rounded-2xl shadow-lg p-8">
+        <div className="mt-8 bg-white rounded-xl border border-slate-200 p-8">
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Draft Events</h1>
-              <p className="text-gray-600 mt-1">Manage your unpublished events</p>
+              <h1 className="text-3xl font-bold text-slate-900">Draft Events</h1>
+              <p className="text-slate-500 mt-1">Manage your unpublished events</p>
             </div>
             <Link
               href="/submit-event"
-              className="rounded-full bg-purple-600 text-white px-6 py-3 font-semibold hover:bg-purple-700"
+              className="rounded-lg bg-indigo-500 text-white px-6 py-3 font-semibold hover:bg-indigo-600 transition-colors"
             >
               + New Event
             </Link>
@@ -173,10 +173,10 @@ export default function DraftsPage() {
 
           {draftEvents.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-600 mb-4">No draft events yet</p>
+              <p className="text-slate-500 mb-4">No draft events yet</p>
               <Link
                 href="/submit-event"
-                className="text-purple-600 hover:text-purple-700 font-semibold"
+                className="text-indigo-500 hover:text-indigo-600 font-semibold"
               >
                 Create your first event
               </Link>
@@ -186,7 +186,7 @@ export default function DraftsPage() {
               {draftEvents.map((draft) => (
                 <div
                   key={draft.id}
-                  className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                  className="border border-slate-200 rounded-lg p-6 hover:border-slate-300 transition-colors"
                 >
                   <div className="flex gap-6">
                     {draft.images?.[0] && (
@@ -197,9 +197,9 @@ export default function DraftsPage() {
                       />
                     )}
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">{draft.title}</h3>
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{draft.description}</p>
-                      <div className="flex gap-4 mt-3 text-sm text-gray-500">
+                      <h3 className="text-lg font-semibold text-slate-900">{draft.title}</h3>
+                      <p className="text-sm text-slate-500 mt-1 line-clamp-2">{draft.description}</p>
+                      <div className="flex gap-4 mt-3 text-sm text-slate-400">
                         <span>{new Date(draft.start_date).toLocaleDateString()}</span>
                         <span>•</span>
                         <span>{draft.sport_category}</span>
@@ -211,7 +211,7 @@ export default function DraftsPage() {
                       <button
                         onClick={() => handlePublishClick(draft)}
                         disabled={publishingId === draft.id}
-                        className="px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 disabled:opacity-50"
+                        className="px-4 py-2 rounded-lg bg-indigo-500 text-white font-semibold hover:bg-indigo-600 disabled:opacity-50 transition-colors"
                       >
                         Publish
                       </button>
