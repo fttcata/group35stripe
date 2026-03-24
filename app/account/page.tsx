@@ -16,7 +16,10 @@ export default async function AccountPage() {
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role || user.user_metadata?.role || 'attendee'
+  const profileRole = (profile?.role || '').toLowerCase()
+  const metaRole = String(user.user_metadata?.role || '').toLowerCase()
+  const isOrganizerAccount = profileRole === 'organizer' || profileRole === 'organiser' || metaRole === 'organizer' || metaRole === 'organiser'
+  const role = isOrganizerAccount ? (profileRole || metaRole) : (profileRole || metaRole || 'attendee')
   const fullName = profile?.full_name || user.user_metadata?.full_name || ''
 
   return (

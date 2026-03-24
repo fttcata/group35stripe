@@ -414,3 +414,113 @@ export async function sendStaffInviteEmail(params: {
     };
   }
 }
+
+/**
+ * Sends notification email when an event's date or venue changes
+ */
+export async function sendEventChangeEmail(params: {
+  email: string;
+  eventTitle: string;
+  eventDate: string;
+  eventVenue: string;
+  changes: { dateChanged?: boolean; venueChanged?: boolean };
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
+    const changeParts: string[] = [];
+    if (params.changes.dateChanged) changeParts.push('date/time');
+    if (params.changes.venueChanged) changeParts.push('venue');
+    const changeLabel = changeParts.join(' and ');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <body style="font-family: Arial, sans-serif; color: #1f2937;">
+        <div style="max-width: 640px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+          <div style="background: #f59e0b; color: #ffffff; padding: 20px;">
+            <h2 style="margin: 0;">Event Update</h2>
+          </div>
+          <div style="padding: 20px; background: #ffffff;">
+            <p style="margin-top: 0;">The <strong>${changeLabel}</strong> for <strong>${params.eventTitle}</strong> has been updated.</p>
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 16px 0;">
+              ${params.changes.dateChanged ? `<p style="margin: 4px 0;"><strong>New Date:</strong> ${formatEventDate(params.eventDate, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
+              ${params.changes.venueChanged ? `<p style="margin: 4px 0;"><strong>New Venue:</strong> ${params.eventVenue}</p>` : ''}
+            </div>
+            <p>Please check the event page for the latest details. Your ticket is still valid.</p>
+            <p style="color: #6b7280; font-size: 14px; margin-bottom: 0;">If you have any questions, please contact the event organizer.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const result = await transporter.sendMail({
+      from: fromEmail,
+      to: params.email,
+      subject: `Event Update: ${params.eventTitle}`,
+      html,
+      replyTo: replyToEmail,
+    });
+
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('Failed to send event change email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * Sends email when a user is invited to co-manage an event
+ */
+export async function sendCoOrganizerInviteEmail(params: {
+  email: string;
+  eventTitle: string;
+  inviterName: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <body style="font-family: Arial, sans-serif; color: #1f2937;">
+        <div style="max-width: 640px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+          <div style="background: #0f172a; color: #f8fafc; padding: 20px;">
+            <h2 style="margin: 0;">You&rsquo;re invited to co-manage an event</h2>
+          </div>
+          <div style="padding: 20px; background: #ffffff;">
+            <p style="margin-top: 0;"><strong>${params.inviterName}</strong> has invited you to co-manage:</p>
+            <p style="font-size: 18px; font-weight: 700; margin: 10px 0 20px 0;">${params.eventTitle}</p>
+            <p>Log in to your account and visit your notifications to accept or decline this invitation.</p>
+            <p style="margin-bottom: 0; color: #475569;">As a co-organizer you will be able to edit event details, manage tickets, and invite staff.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const result = await transporter.sendMail({
+      from: fromEmail,
+      to: params.email,
+      subject: `Co-organizer invite for ${params.eventTitle}`,
+      html,
+      replyTo: replyToEmail,
+    });
+
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('Failed to send co-organizer invite email:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}

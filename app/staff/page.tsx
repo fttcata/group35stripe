@@ -54,7 +54,7 @@ export default function StaffPage() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <section className="border-b border-slate-200 bg-white">
         <div className="max-w-5xl mx-auto px-4 py-8">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Staff Workspace</p>
@@ -81,7 +81,7 @@ export default function StaffPage() {
               Ask an organizer to assign you as staff or activate your invite code in your account.
             </p>
             <div className="mt-4">
-              <Link href="/account" className="inline-block rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-2">
+              <Link href="/account" className="inline-block rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-4 py-2 transition-colors">
                 Open Account
               </Link>
             </div>

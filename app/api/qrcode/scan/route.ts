@@ -92,6 +92,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!resolvedEventId) {
+      return NextResponse.json({ error: 'Could not determine event for this ticket' }, { status: 400 });
+    }
+
     const allowed = await canUserScanEvent(resolvedEventId, user.id);
     if (!allowed) {
       return NextResponse.json({ error: 'You are not registered as staff for this event' }, { status: 403 });

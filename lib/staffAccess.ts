@@ -39,7 +39,18 @@ export async function isUserOrganizerForEvent(eventId: string, userId: string): 
     return false;
   }
 
-  return event.created_by === userId;
+  if (event.created_by === userId) return true;
+
+  // Check if user is an accepted co-organizer
+  const { data: coOrg } = await serverClient
+    .from('event_co_organizers')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('user_id', userId)
+    .eq('status', 'accepted')
+    .maybeSingle();
+
+  return !!coOrg;
 }
 
 export async function isUserStaffForEvent(eventId: string, userId: string): Promise<boolean> {

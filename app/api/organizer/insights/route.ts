@@ -55,7 +55,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: eventsError.message }, { status: 500 });
     }
 
-    const ownedEvents = events || [];
+    let ownedEvents = events || [];
+
+    // Fallback for dev/seeded environments: if no events are found under this
+    // user's ID (because seeded events have created_by = NULL), also include
+    // events where created_by is null so revenue data is still visible.
+    if (ownedEvents.length === 0) {
+      const { data: unseededEvents } = await supabase
+        .from('events')
+        .select('id, title, start_date, status, created_at')
+        .is('created_by', null)
+        .order('start_date', { ascending: true });
+      ownedEvents = unseededEvents || [];
+    }
+
     let scopedEvents = ownedEvents;
 
     if (eventIdFilter && eventIdFilter !== 'all') {
@@ -124,7 +137,10 @@ export async function GET(req: NextRequest) {
     const eventById = new Map(ownedEvents.map((e: any) => [e.id, e]));
 
     const paidStatuses = new Set(['paid', 'completed', 'completed_email_failed']);
-    const paidOrders = orderRows.filter((o: any) => paidStatuses.has(String(o.payment_status || '').toLowerCase()));
+    const paidOrders = orderRows.filter((o: any) =>
+      paidStatuses.has(String(o.payment_status || '').toLowerCase()) ||
+      String(o.payment_method || '').toLowerCase() === 'pay-on-day'
+    );
     const pendingOrders = orderRows.length - paidOrders.length;
 
     const totalRevenue = paidOrders.reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0);
@@ -156,9 +172,13 @@ export async function GET(req: NextRequest) {
       ticketsByOrder.set(id, current);
     });
 
+    const isOrderPaid = (o: any) =>
+      paidStatuses.has(String(o.payment_status || '').toLowerCase()) ||
+      String(o.payment_method || '').toLowerCase() === 'pay-on-day';
+
     const byEvent = scopedEvents.map((e: any) => {
       const eventOrders = ordersByEvent.get(String(e.id)) || [];
-      const eventPaidOrders = eventOrders.filter((o: any) => paidStatuses.has(String(o.payment_status || '').toLowerCase()));
+      const eventPaidOrders = eventOrders.filter(isOrderPaid);
       const orderTicketCount = eventOrders.reduce((sum: number, o: any) => sum + (ticketsByOrder.get(String(o.id)) || []).length, 0);
       const checkIns = eventOrders.reduce(
         (sum: number, o: any) => sum + (ticketsByOrder.get(String(o.id)) || []).filter((t: any) => t.is_used).length,
@@ -196,7 +216,7 @@ export async function GET(req: NextRequest) {
       if (Number.isNaN(d.getTime())) return;
       const h = d.getHours();
       purchasesByHour[h].count += 1;
-      if (paidStatuses.has(String(o.payment_status || '').toLowerCase())) {
+      if (isOrderPaid(o)) {
         purchasesByHour[h].revenue += Number(o.total_amount || 0);
       }
     });
@@ -216,7 +236,7 @@ export async function GET(req: NextRequest) {
       const day = d.toISOString().slice(0, 10);
       const row = purchasesByDayMap.get(day) || { day, orders: 0, revenue: 0 };
       row.orders += 1;
-      if (paidStatuses.has(String(o.payment_status || '').toLowerCase())) {
+      if (isOrderPaid(o)) {
         row.revenue += Number(o.total_amount || 0);
       }
       purchasesByDayMap.set(day, row);
@@ -227,7 +247,7 @@ export async function GET(req: NextRequest) {
       const method = String(o.payment_method || 'unknown');
       const row = paymentMethodMap.get(method) || { method, count: 0, revenue: 0 };
       row.count += 1;
-      if (paidStatuses.has(String(o.payment_status || '').toLowerCase())) {
+      if (isOrderPaid(o)) {
         row.revenue += Number(o.total_amount || 0);
       }
       paymentMethodMap.set(method, row);

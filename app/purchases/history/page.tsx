@@ -65,18 +65,18 @@ function isUpcoming(dateStr: string) {
 
 function paymentBadge(status: string) {
   const map: Record<string, { bg: string; text: string; label: string }> = {
-    completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Paid' },
-    pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending' },
+    completed: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Paid' },
+    pending: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pending' },
     completed_email_failed: {
-      bg: 'bg-green-100',
-      text: 'text-green-800',
+      bg: 'bg-emerald-50',
+      text: 'text-emerald-700',
       label: 'Paid',
     },
-    refunded: { bg: 'bg-red-100', text: 'text-red-800', label: 'Refunded' },
+    refunded: { bg: 'bg-red-50', text: 'text-red-700', label: 'Refunded' },
   };
   const style = map[status] || {
-    bg: 'bg-gray-100',
-    text: 'text-gray-800',
+    bg: 'bg-slate-100',
+    text: 'text-slate-700',
     label: status,
   };
   return (
@@ -186,17 +186,17 @@ function QRModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4"
+        className="bg-white rounded-xl border border-slate-200 p-6 max-w-sm w-full mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h3 className="font-bold text-lg text-gray-900">{eventTitle}</h3>
-            <p className="text-sm text-gray-500">{ticket.ticket_type}</p>
+            <h3 className="font-bold text-lg text-slate-900">{eventTitle}</h3>
+            <p className="text-sm text-slate-500">{ticket.ticket_type}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="text-slate-400 hover:text-slate-600 text-xl leading-none"
           >
             ✕
           </button>
@@ -206,7 +206,7 @@ function QRModal({
           <img
             src={ticket.qr_code_data}
             alt={`QR code for ${ticket.ticket_code}`}
-            className="w-56 h-56 border border-gray-200 rounded-lg"
+            className="w-56 h-56 border border-slate-200 rounded-lg"
           />
         </div>
 
@@ -214,7 +214,7 @@ function QRModal({
           <p className="font-mono text-sm font-bold text-indigo-600">
             {ticket.ticket_code}
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             {ticket.is_used ? '✓ Already used' : 'Scan at event entry'}
           </p>
         </div>
@@ -242,7 +242,7 @@ function PurchaseCard({
 
   return (
     <div
-      className={`bg-white rounded-xl border ${isPast ? 'border-gray-200 opacity-80' : 'border-gray-200 shadow-sm hover:shadow-md transition-shadow'}`}
+      className={`bg-white rounded-xl border ${isPast ? 'border-slate-200 opacity-80' : 'border-slate-200 hover:border-slate-300 transition-colors'}`}
     >
       {/* Top bar */}
       <div className="flex items-start justify-between p-5 pb-3">
@@ -250,21 +250,21 @@ function PurchaseCard({
           {event ? (
             <Link
               href={`/events/${event.id}`}
-              className="text-lg font-bold text-gray-900 hover:text-indigo-600 truncate block"
+              className="text-lg font-bold text-slate-900 hover:text-indigo-600 truncate block transition-colors"
             >
               {title}
             </Link>
           ) : (
-            <span className="text-lg font-bold text-gray-900 truncate block">
+            <span className="text-lg font-bold text-slate-900 truncate block">
               {title}
             </span>
           )}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
-            {event?.date && <span>📅 {formatDate(event.date)}</span>}
-            {event?.date && <span>🕐 {formatTime(event.date)}</span>}
-            {event?.venue && <span>📍 {event.venue}</span>}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-slate-500">
+            {event?.date && <span>{formatDate(event.date)}</span>}
+            {event?.date && <span>{formatTime(event.date)}</span>}
+            {event?.venue && <span>{event.venue}</span>}
             {event?.sport_category && (
-              <span className="bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full">
+              <span className="bg-indigo-50 text-indigo-600 text-xs px-2 py-0.5 rounded-lg">
                 {event.sport_category}
               </span>
             )}
@@ -273,7 +273,7 @@ function PurchaseCard({
 
         <div className="ml-4 flex flex-col items-end gap-1">
           {paymentBadge(purchase.payment_status)}
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-sm font-semibold text-slate-900">
             €{Number(purchase.total_amount).toFixed(2)}
           </span>
         </div>
@@ -282,8 +282,8 @@ function PurchaseCard({
       {/* Tickets */}
       <div className="px-5 pb-4">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-gray-700">
-            🎫 {ticketCount} Ticket{ticketCount !== 1 ? 's' : ''}
+          <h4 className="text-sm font-semibold text-slate-700">
+            {ticketCount} Ticket{ticketCount !== 1 ? 's' : ''}
           </h4>
         </div>
 
@@ -291,29 +291,29 @@ function PurchaseCard({
           {purchase.tickets.map((ticket) => (
             <div
               key={ticket.id}
-              className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-100"
+              className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 border border-slate-100"
             >
               <div className="min-w-0">
-                <span className="text-sm font-medium text-gray-800 block truncate">
+                <span className="text-sm font-medium text-slate-800 block truncate">
                   {ticket.ticket_type}
                 </span>
-                <span className="text-xs font-mono text-gray-400">
+                <span className="text-xs font-mono text-slate-400">
                   {ticket.ticket_code}
                 </span>
               </div>
               <div className="flex items-center gap-2 ml-2">
                 {ticket.is_used ? (
-                  <span className="text-xs text-gray-400 bg-gray-200 rounded-full px-2 py-0.5">
+                  <span className="text-xs text-slate-400 bg-slate-200 rounded-lg px-2 py-0.5">
                     Used
                   </span>
                 ) : (
-                  <span className="text-xs text-green-700 bg-green-100 rounded-full px-2 py-0.5">
+                  <span className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-2 py-0.5">
                     Valid
                   </span>
                 )}
                 <button
                   onClick={() => onViewQR(ticket, title)}
-                  className="text-indigo-600 hover:text-indigo-800 text-xs font-medium whitespace-nowrap"
+                  className="text-indigo-500 hover:text-indigo-600 text-xs font-medium whitespace-nowrap transition-colors"
                   title="View QR Code"
                 >
                   QR ↗
@@ -325,15 +325,15 @@ function PurchaseCard({
       </div>
 
       {/* Actions bar */}
-      <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between bg-gray-50/50 rounded-b-xl">
-        <span className="text-xs text-gray-400">
+      <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-between bg-slate-50/50 rounded-b-xl">
+        <span className="text-xs text-slate-400">
           Ordered {formatDate(purchase.created_at)}
         </span>
         <button
           onClick={() => downloadTicketPDF(purchase)}
-          className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+          className="inline-flex items-center gap-1 text-sm font-medium text-indigo-500 hover:text-indigo-600 transition-colors"
         >
-          📄 Download PDF
+          Download PDF
         </button>
       </div>
     </div>
@@ -399,15 +399,15 @@ export default function PurchasesPage() {
   /* ---- Not signed in ---- */
   if (!loading && !user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="bg-white rounded-xl shadow p-8 max-w-md w-full text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">My Purchases</h1>
-          <p className="text-gray-500 mb-6">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-8 max-w-md w-full text-center">
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">My Purchases</h1>
+          <p className="text-slate-500 mb-6">
             Sign in to view all events you&apos;ve purchased tickets for.
           </p>
           <Link
             href="/login"
-            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-6 py-2.5 transition"
+            className="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg px-6 py-2.5 transition-colors"
           >
             Sign In
           </Link>
@@ -417,12 +417,12 @@ export default function PurchasesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       <main className="max-w-3xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">My Purchases</h1>
-          <p className="text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-slate-900">My Purchases</h1>
+          <p className="text-slate-500 mt-1">
             All events you&apos;ve purchased tickets for in one place.
           </p>
         </div>
@@ -433,11 +433,11 @@ export default function PurchasesPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse"
+                className="bg-white rounded-xl border border-slate-200 p-5 animate-pulse"
               >
-                <div className="h-5 bg-gray-200 rounded w-2/3 mb-3" />
-                <div className="h-4 bg-gray-100 rounded w-1/3 mb-2" />
-                <div className="h-4 bg-gray-100 rounded w-1/2" />
+                <div className="h-5 bg-slate-200 rounded w-2/3 mb-3" />
+                <div className="h-4 bg-slate-100 rounded w-1/3 mb-2" />
+                <div className="h-4 bg-slate-100 rounded w-1/2" />
               </div>
             ))}
           </div>
@@ -453,16 +453,18 @@ export default function PurchasesPage() {
         {/* Empty state */}
         {!loading && !error && purchases.length === 0 && (
           <div className="text-center py-16">
-            <p className="text-5xl mb-4">🎟️</p>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-full mb-4">
+              <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">
               No purchases yet
             </h2>
-            <p className="text-gray-500 mb-6">
+            <p className="text-slate-500 mb-6">
               Browse events and grab your first tickets!
             </p>
             <Link
               href="/events"
-              className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-6 py-2.5 transition"
+              className="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg px-6 py-2.5 transition-colors"
             >
               Browse Events
             </Link>
@@ -472,9 +474,9 @@ export default function PurchasesPage() {
         {/* Upcoming events */}
         {!loading && upcoming.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="text-green-500">●</span> Upcoming Events
-              <span className="text-sm font-normal text-gray-400">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <span className="text-emerald-500">●</span> Upcoming Events
+              <span className="text-sm font-normal text-slate-400">
                 ({upcoming.length})
               </span>
             </h2>
@@ -494,9 +496,9 @@ export default function PurchasesPage() {
         {/* Past events */}
         {!loading && past.length > 0 && (
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="text-gray-400">●</span> Past Events
-              <span className="text-sm font-normal text-gray-400">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <span className="text-slate-300">●</span> Past Events
+              <span className="text-sm font-normal text-slate-400">
                 ({past.length})
               </span>
             </h2>

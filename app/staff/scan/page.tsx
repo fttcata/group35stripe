@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react';
 import { loadStripeTerminal } from '@stripe/terminal-js';
 import type { Reader, Terminal } from '@stripe/terminal-js';
 import Link from 'next/link';
@@ -26,7 +26,15 @@ interface StaffEvent {
   venue: string | null;
 }
 
-export default function StaffScanPage() {
+export default function StaffScanPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <StaffScanPage />
+    </Suspense>
+  );
+}
+
+function StaffScanPage() {
   const searchParams = useSearchParams();
   const selectedEventId = (searchParams.get('eventId') || '').trim();
 

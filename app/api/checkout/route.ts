@@ -20,6 +20,7 @@ interface CheckoutRequest {
   totalPrice?: number;
   quantity?: number;
   eventId?: string;
+  ticketBreakdown?: string;
   // Guest checkout fields
   isGuest?: boolean;
   guestName?: string;
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
         eventDate,
         eventId,
         quantity: quantity.toString(),
+        ticketBreakdown: body.ticketBreakdown || '',
         isGuest: isGuest.toString(),
         guestName,
         guestEmail,

@@ -50,18 +50,23 @@ export default function EventMapInner({ items, center }: Props) {
     items.forEach((it) => {
       if (it.lat !== undefined && it.lng !== undefined) {
         const marker = L.circleMarker([it.lat, it.lng], {
-          radius: 8,
-          color: '#7c3aed',
-          fillColor: '#7c3aed',
-          fillOpacity: 0.9
+          radius: 10,
+          color: '#4f46e5',
+          fillColor: '#4f46e5',
+          fillOpacity: 0.85,
+          weight: 2,
         }).addTo(markers)
 
         const slug = it.slug || it.title.toLowerCase().replace(/\s+/g, '-')
+        const safeTitle = it.title.replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+        const safeLocation = (it.location || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+        const encodedSlug = encodeURIComponent(slug)
 
         marker.bindPopup(`
-          <div style="max-width: 200px;">
-            <strong>${it.title}</strong>
-            <div style="font-size: 12px; color: #666;">${it.location || ''}</div>
+          <div style="max-width: 220px; font-family: system-ui, sans-serif;">
+            <strong style="font-size: 14px;">${safeTitle}</strong>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">${safeLocation}</div>
+            <a href="/eventDetails?slug=${encodedSlug}" style="display:inline-block; margin-top: 8px; padding: 4px 12px; background: #4f46e5; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600;">View Event</a>
             <div style="font-size: 11px; color: #888; margin-top: 4px;">${it.date}</div>
             <a href="/eventDetails?slug=${encodeURIComponent(slug)}" style="display:inline-block;margin-top:8px;padding:4px 12px;background:#7c3aed;color:#fff;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View Event</a>
           </div>

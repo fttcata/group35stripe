@@ -48,11 +48,21 @@ export default async function OrganizerCommandCenterPage() {
     redirect('/')
   }
 
-  const { data: events } = await supabase
+  let { data: events } = await supabase
     .from('events')
     .select('id,title,description,start_date,venue,status')
     .eq('created_by', user.id)
     .order('start_date', { ascending: true })
+
+  // Dev fallback: seeded events have created_by = NULL
+  if (!events || events.length === 0) {
+    const { data: unseeded } = await supabase
+      .from('events')
+      .select('id,title,description,start_date,venue,status')
+      .is('created_by', null)
+      .order('start_date', { ascending: true })
+    events = unseeded || []
+  }
 
   const allEvents = (events || []) as EventRow[]
   const now = new Date()
@@ -62,7 +72,7 @@ export default async function OrganizerCommandCenterPage() {
   const upcoming = allEvents.filter((e) => new Date(e.start_date) >= now)
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <section className="border-b border-slate-200 bg-white">
         <div className="max-w-6xl mx-auto px-4 py-10">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Organizer Workspace</p>
@@ -73,7 +83,7 @@ export default async function OrganizerCommandCenterPage() {
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/submit-event"
-              className="rounded-lg bg-slate-900 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-700"
+              className="rounded-lg bg-indigo-500 text-white px-5 py-3 text-sm font-semibold hover:bg-indigo-600 transition-colors"
             >
               Create Event
             </Link>
@@ -85,7 +95,7 @@ export default async function OrganizerCommandCenterPage() {
             </Link>
             <Link
               href="/organizer/insights"
-              className="rounded-lg border border-blue-300 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+              className="rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
             >
               Open Insights
             </Link>
@@ -110,7 +120,7 @@ export default async function OrganizerCommandCenterPage() {
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <p className="text-sm text-slate-500">Upcoming</p>
-          <p className="mt-1 text-3xl font-bold text-blue-700">{upcoming.length}</p>
+          <p className="mt-1 text-3xl font-bold text-indigo-600">{upcoming.length}</p>
         </div>
       </section>
 
@@ -118,7 +128,7 @@ export default async function OrganizerCommandCenterPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-xl font-semibold">Your Event Pipeline</h2>
-            <span className="text-xs font-semibold rounded-full bg-amber-100 text-amber-800 px-3 py-1">
+            <span className="text-xs font-semibold rounded-lg bg-amber-100 text-amber-800 px-3 py-1">
               {drafts.length} draft{drafts.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -140,7 +150,7 @@ export default async function OrganizerCommandCenterPage() {
                       <p className="text-sm text-slate-500">{event.venue || 'Venue TBA'}</p>
                     </div>
                     <span
-                      className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
                         event.status === 'published'
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-amber-100 text-amber-800'
@@ -162,7 +172,7 @@ export default async function OrganizerCommandCenterPage() {
                     {event.status === 'published' && (
                       <Link
                         href={`/my-events/${event.id}/staff`}
-                        className="rounded-md border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-100"
+                        className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                       >
                         Manage Staff
                       </Link>

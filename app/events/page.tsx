@@ -1,33 +1,32 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import EventCard from '../components/EventCard'
+import Image from 'next/image'
 import { events as eventsData, type Event, type TicketType } from './data'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 const EventMap = dynamic(() => import('../components/EventMap'), { ssr: false })
 
-const SPORT_CATEGORIES = ['Running', 'Football', 'Basketball', 'Tennis', 'Swimming', 'Cycling', 'Other'] as const
+const CATEGORIES = ['Running', 'Football', 'Basketball', 'Tennis', 'Swimming', 'Cycling', 'Other'] as const
 
-function monthKey(dateStr: string) {
-  const d = new Date(dateStr)
-  return d.toLocaleString('default', { month: 'long', year: 'numeric' })
+type SortOption = 'date' | 'alpha' | 'posted' | 'type'
+
+// Fuzzy search: split query into words, each word must match at least one field
+function fuzzyMatch(query: string, event: Event): boolean {
+  if (!query.trim()) return true
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const haystack = [
+    event.title,
+    event.description,
+    event.location ?? '',
+    event.sportCategory ?? '',
+  ].join(' ').toLowerCase()
+
+  return words.every(word => haystack.includes(word))
 }
 
-function groupByMonth(items: Event[]) {
-  const map: Record<string, Event[]> = {}
-  const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date))
-  for (const ev of sorted) {
-    const key = monthKey(ev.date)
-    if (!map[key]) map[key] = []
-    map[key].push(ev)
-  }
-  return map
-}
-
-// Parse a YYYY-MM-DD string into a local-midnight Date (avoids UTC-offset bugs)
 function parseLocalDate(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d)
@@ -39,17 +38,28 @@ function isOrganizerRole(role: unknown) {
   return normalized === 'organizer' || normalized === 'organiser'
 }
 
+function formatDate(d: string) {
+  try {
+    return new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  } catch {
+    return d
+  }
+}
+
 export default function EventsPage() {
-  const [allEvents, setAllEvents] = useState<Event[]>(eventsData)
+  const [allEvents, setAllEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [isOrganizerView, setIsOrganizerView] = useState(false)
 
-  // Filter state
+  // View: list or map
+  const [view, setView] = useState<'list' | 'map'>('list')
+
+  // Search & filter state
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<SortOption>('date')
+  const [selectedCategory, setSelectedCategory] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [selectedLocation, setSelectedLocation] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   useEffect(() => {
@@ -75,7 +85,7 @@ export default function EventsPage() {
 
       const baseQuery = supabase
         .from('events')
-        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,lat,lng,status,created_by')
+        .select('id,title,description,start_date,end_time,sport_category,venue,location_url,images,lat,lng,status,created_by,created_at')
 
       const scopedQuery = organizerMode && user?.id
         ? baseQuery.eq('created_by', user.id)
@@ -91,12 +101,13 @@ export default function EventsPage() {
       }
 
       const eventIds = (dbEvents || []).map((e) => e.id)
-      let ticketRows: Array<{ event_id: number; name: string; price: number }> = []
 
+      // Fetch ticket types with quantity
+      let ticketRows: Array<{ event_id: string; id: string; name: string; price: number; quantity?: number }> = []
       if (eventIds.length > 0) {
         const { data: tickets, error: ticketError } = await supabase
           .from('ticket_types')
-          .select('event_id,name,price')
+          .select('event_id,id,name,price,quantity')
           .in('event_id', eventIds)
 
         if (!ticketError && tickets) {
@@ -104,16 +115,47 @@ export default function EventsPage() {
         }
       }
 
-      const ticketsByEventId = ticketRows.reduce<Record<number, TicketType[]>>((acc, row) => {
-        if (!acc[row.event_id]) acc[row.event_id] = []
-        acc[row.event_id].push({ name: row.name, price: row.price })
-        return acc
-      }, {})
+      // Compute total available per event
+      const ticketsByEventId: Record<string, TicketType[]> = {}
+      const availableByEvent: Record<string, number> = {}
+      for (const row of ticketRows) {
+        if (!ticketsByEventId[row.event_id]) ticketsByEventId[row.event_id] = []
+        ticketsByEventId[row.event_id].push({ id: row.id, name: row.name, price: row.price, quantity: row.quantity ?? 0 })
+        availableByEvent[row.event_id] = (availableByEvent[row.event_id] || 0) + (row.quantity ?? 0)
+      }
+
+      // Compute sold tickets per event (count tickets via orders)
+      const soldByEvent: Record<string, number> = {}
+      if (eventIds.length > 0) {
+        const { data: completedOrders } = await supabase
+          .from('orders')
+          .select('id, event_id')
+          .eq('payment_status', 'completed')
+          .in('event_id', eventIds)
+
+        if (completedOrders && completedOrders.length > 0) {
+          const orderIds = completedOrders.map(o => o.id)
+          const orderToEvent: Record<string, string> = {}
+          completedOrders.forEach(o => { orderToEvent[o.id] = o.event_id })
+
+          const { data: soldTickets } = await supabase
+            .from('tickets')
+            .select('order_id')
+            .in('order_id', orderIds)
+
+          soldTickets?.forEach(t => {
+            const eid = orderToEvent[t.order_id]
+            if (eid) soldByEvent[eid] = (soldByEvent[eid] || 0) + 1
+          })
+        }
+      }
 
       const mappedEvents: Event[] = (dbEvents || []).map((e) => {
         const startDate = new Date(e.start_date)
         const endDate = new Date(e.end_time)
         const slugBase = e.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
+        const totalAvail = availableByEvent[e.id] || 0
+        const totalSold = soldByEvent[e.id] || 0
         return {
           slug: `${slugBase}-${e.id}`,
           title: e.title,
@@ -123,12 +165,16 @@ export default function EventsPage() {
           endTime: endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
           sportCategory: e.sport_category,
           image: e.images?.[0],
+          images: e.images ?? [],
           location: e.venue,
           locationUrl: e.location_url || undefined,
           lat: typeof e.lat === 'number' ? e.lat : undefined,
           lng: typeof e.lng === 'number' ? e.lng : undefined,
           rating: 0,
           ticketTypes: ticketsByEventId[e.id] || [],
+          totalAvailable: totalAvail,
+          totalSold: totalSold,
+          createdAt: e.created_at,
         }
       })
 
@@ -139,81 +185,55 @@ export default function EventsPage() {
     loadEvents()
   }, [])
 
-  // Derive unique locations for the location filter dropdown
-  const uniqueLocations = useMemo(() => {
-    const locs = allEvents
-      .map((e) => e.location)
-      .filter((l): l is string => !!l)
-    return [...new Set(locs)].sort()
-  }, [allEvents])
-
-  // Apply filters
+  // Apply filters + search + sort
   const filteredEvents = useMemo(() => {
     const fromDate = dateFrom ? parseLocalDate(dateFrom) : null
     const toDate = dateTo ? parseLocalDate(dateTo) : null
 
-    const results = allEvents.filter((ev) => {
-      // Text search
-      if (search) {
-        const q = search.toLowerCase()
-        const matches =
-          ev.title.toLowerCase().includes(q) ||
-          ev.description.toLowerCase().includes(q) ||
-          (ev.location?.toLowerCase().includes(q) ?? false)
-        if (!matches) return false
-      }
-
-      // Date range filter
+    let results = allEvents.filter((ev) => {
+      if (!fuzzyMatch(search, ev)) return false
       if (fromDate || toDate) {
         const evDate = parseLocalDate(ev.date)
         if (fromDate && evDate < fromDate) return false
         if (toDate && evDate > toDate) return false
       }
-
-      // Category filter
-      if (selectedCategories.length > 0) {
-        if (!ev.sportCategory || !selectedCategories.includes(ev.sportCategory)) return false
-      }
-
-      // Location filter
-      if (selectedLocation) {
-        if (ev.location !== selectedLocation) return false
-      }
-
+      if (selectedCategory && ev.sportCategory !== selectedCategory) return false
       return true
     })
 
-    return results
-  }, [allEvents, search, dateFrom, dateTo, selectedCategories, selectedLocation])
+    // Sort
+    results = [...results].sort((a, b) => {
+      switch (sortBy) {
+        case 'date':
+          return a.date.localeCompare(b.date)
+        case 'alpha':
+          return a.title.localeCompare(b.title)
+        case 'posted':
+          return (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+        case 'type':
+          return (a.sportCategory ?? '').localeCompare(b.sportCategory ?? '')
+        default:
+          return 0
+      }
+    })
 
-  const grouped = groupByMonth(filteredEvents)
+    return results
+  }, [allEvents, search, dateFrom, dateTo, selectedCategory, sortBy])
 
   const activeFilterCount =
     (search ? 1 : 0) +
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0) +
-    selectedCategories.length +
-    (selectedLocation ? 1 : 0)
+    (selectedCategory ? 1 : 0)
 
-  function clearFilters() {
+  const clearFilters = useCallback(() => {
     setSearch('')
     setDateFrom('')
     setDateTo('')
-    setSelectedCategories([])
-    setSelectedLocation('')
-  }
+    setSelectedCategory('')
+  }, [])
 
-  function formatDisplayDate(iso: string) {
-    const [y, m, d] = iso.split('-')
-    return `${d}-${m}-${y}`
-  }
-
-  function toggleCategory(cat: string) {
-    setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    )
-  }
-
+  // ─── Organizer view (unchanged) ───────────────────────────
   if (isOrganizerView) {
     const today = new Date()
     const publishedCount = allEvents.filter((e: any) => e.status === 'published').length
@@ -288,7 +308,7 @@ export default function EventsPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-lg font-bold text-slate-100">{e.title}</h3>
-                        <p className="text-sm text-slate-400 mt-1">{formatDisplayDate(e.date)}</p>
+                        <p className="text-sm text-slate-400 mt-1">{formatDate(e.date)}</p>
                         <p className="text-sm text-slate-400">{e.location || 'Location TBA'}</p>
                       </div>
                       <span className={`text-xs font-bold px-2 py-1 rounded-full ${(e as any).status === 'draft' ? 'bg-amber-600/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40'}`}>
@@ -313,80 +333,51 @@ export default function EventsPage() {
     )
   }
 
+  // ─── Public events view ───────────────────────────────────
   return (
-    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
-      {/* Top Navigation */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-end gap-4">
-          <Link
-            href="/my-events"
-            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
-          >
-            My Events
-          </Link>
-          <Link
-            href="/drafts"
-            className="text-sm text-purple-600 hover:text-purple-700 font-semibold px-4 py-2 rounded-lg hover:bg-purple-50"
-          >
-            Drafts
-          </Link>
-          <Link
-            href="/submit-event"
-            className="text-sm bg-purple-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-purple-700"
-          >
-            + Create Event
-          </Link>
-        </div>
-      </div>
-
+    <main className="min-h-screen bg-white">
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-linear-to-r from-purple-600 via-blue-600 to-indigo-700 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative max-w-6xl mx-auto px-4 py-16 sm:py-24">
-          <div className="text-center space-y-4">
-            <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight">
-              Upcoming Events
-            </h1>
-            <p className="text-xl sm:text-2xl text-purple-100 max-w-2xl mx-auto">
-              Discover amazing events, workshops, and meetups near you
-            </p>
-
+      <div className="relative overflow-hidden bg-slate-900 text-white">
+        <div aria-hidden className="absolute inset-0 bg-linear-to-br from-indigo-600/15 via-transparent to-transparent" />
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <p className="text-indigo-400 font-semibold text-sm tracking-wide uppercase mb-2">Explore</p>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                Upcoming Events
+              </h1>
+              <p className="mt-2 text-slate-400 max-w-lg">
+                Discover amazing events, workshops, and meetups near you
+              </p>
+            </div>
+            {isOrganizerView && (
+              <div className="flex gap-2">
+                <Link href="/my-events" className="text-sm font-medium text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">My Events</Link>
+                <Link href="/drafts" className="text-sm font-medium text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition-colors">Drafts</Link>
+                <Link href="/submit-event" className="text-sm font-medium bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-lg transition-colors">+ Create Event</Link>
+              </div>
+            )}
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-linear-to-t from-purple-50 to-transparent"></div>
       </div>
 
-      {/* Filters Section */}
-      <section className="max-w-6xl mx-auto px-4 pt-8 pb-2">
-        {/* Search + Toggle Row */}
+      {/* Toolbar: Search + Sort + Map toggle */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 pt-8 pb-2">
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          {/* Search Input */}
+          {/* Search */}
           <div className="relative flex-1">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search events by name, description, or location..."
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700 placeholder-gray-400"
+              placeholder="Search events, locations, categories..."
+              className="w-full pl-10 pr-4 py-3 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-700 placeholder-slate-400"
             />
             {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -394,243 +385,296 @@ export default function EventsPage() {
             )}
           </div>
 
-          {/* Filter Toggle Button */}
+          {/* Sort Dropdown */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="px-4 py-3 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="date">Sort: Date (soonest)</option>
+            <option value="alpha">Sort: A – Z</option>
+            <option value="posted">Sort: Recently posted</option>
+            <option value="type">Sort: Event type</option>
+          </select>
+
+          {/* Filters Toggle */}
           <button
             onClick={() => setFiltersOpen(!filtersOpen)}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl border shadow-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-3 rounded-lg border font-medium text-sm transition-all ${
               filtersOpen || activeFilterCount > 0
-                ? 'bg-purple-600 text-white border-purple-600'
-                : 'bg-white text-gray-700 border-gray-200 hover:border-purple-300'
+                ? 'bg-indigo-500 text-white border-indigo-500'
+                : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
             }`}
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
             Filters
             {activeFilterCount > 0 && (
-              <span className={`text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center ${
-                filtersOpen ? 'bg-white text-purple-600' : 'bg-purple-600 text-white'
-              }`}>
+              <span className="text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center bg-white text-indigo-600">
                 {activeFilterCount}
               </span>
             )}
           </button>
+
+          {/* Map / List Toggle */}
+          <button
+            onClick={() => setView(view === 'list' ? 'map' : 'list')}
+            className={`flex items-center gap-2 px-4 py-3 rounded-lg border font-medium text-sm transition-all ${
+              view === 'map'
+                ? 'bg-indigo-500 text-white border-indigo-500'
+                : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+            }`}
+          >
+            {view === 'list' ? (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+                View on Map
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Back to List
+              </>
+            )}
+          </button>
         </div>
 
-        {/* Expanded Filters Panel */}
+        {/* Expanded Filters */}
         {filtersOpen && (
-          <div className="mt-4 bg-white rounded-2xl border border-gray-200 shadow-lg p-6 animate-fade-in-up space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Date From */}
+          <div className="mt-4 bg-white rounded-xl border border-slate-200 p-6 animate-slide-down space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">From</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  max={dateTo || undefined}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+                <label className="block text-sm font-semibold text-slate-700 mb-2">From</label>
+                <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
               </div>
-
-              {/* Date To */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">To</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  min={dateFrom || undefined}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+                <label className="block text-sm font-semibold text-slate-700 mb-2">To</label>
+                <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
               </div>
-
-              {/* Location Filter */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
-                <select
-                  value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value="">All Locations</option>
-                  {uniqueLocations.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Clear Filters */}
               <div className="flex items-end">
-                <button
-                  onClick={clearFilters}
-                  disabled={activeFilterCount === 0}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Clear All Filters
+                <button onClick={clearFilters} disabled={activeFilterCount === 0} className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                  Clear All
                 </button>
               </div>
             </div>
 
-            {/* Sport Category Chips */}
+            {/* Category chips */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Sport Category</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-3">Category</label>
               <div className="flex flex-wrap gap-2">
-                {SPORT_CATEGORIES.map((cat) => {
-                  const isActive = selectedCategories.includes(cat)
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => toggleCategory(cat)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                        isActive
-                          ? 'bg-purple-600 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  )
-                })}
+                <button
+                  onClick={() => setSelectedCategory('')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    !selectedCategory ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+                  }`}
+                >
+                  All
+                </button>
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      selectedCategory === cat ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Event Count */}
-            <div className="pt-2 border-t border-gray-100">
-              <p className="text-sm text-gray-500">
-                Displaying <span className="font-semibold text-purple-700">{filteredEvents.length}</span> event{filteredEvents.length !== 1 ? 's' : ''}
+            <div className="pt-2 border-t border-slate-100">
+              <p className="text-sm text-slate-500">
+                Showing <span className="font-semibold text-indigo-600">{filteredEvents.length}</span> event{filteredEvents.length !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
         )}
 
-        {/* Active Filter Tags */}
+        {/* Active filter pills */}
         {activeFilterCount > 0 && !filtersOpen && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-gray-500">Active filters:</span>
+            <span className="text-sm text-slate-500">Active:</span>
             {search && (
-              <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm">
+              <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg text-sm">
                 &quot;{search}&quot;
-                <button onClick={() => setSearch('')} className="hover:text-purple-900">
+                <button onClick={() => setSearch('')} className="hover:text-indigo-900">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </span>
             )}
-            {dateFrom && (
-              <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
-                From: {formatDisplayDate(dateFrom)}
-                <button onClick={() => setDateFrom('')} className="hover:text-blue-900">
+            {selectedCategory && (
+              <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg text-sm">
+                {selectedCategory}
+                <button onClick={() => setSelectedCategory('')} className="hover:text-indigo-900">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </span>
             )}
-            {dateTo && (
-              <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
-                To: {formatDisplayDate(dateTo)}
-                <button onClick={() => setDateTo('')} className="hover:text-blue-900">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </span>
-            )}
-            {selectedCategories.map((cat) => (
-              <span key={cat} className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">
-                {cat}
-                <button onClick={() => toggleCategory(cat)} className="hover:text-green-900">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </span>
-            ))}
-            {selectedLocation && (
-              <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm">
-                {selectedLocation}
-                <button onClick={() => setSelectedLocation('')} className="hover:text-orange-900">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </span>
-            )}
-            <button
-              onClick={clearFilters}
-              className="text-sm text-red-500 hover:text-red-700 font-medium ml-2"
-            >
-              Clear all
-            </button>
+            <button onClick={clearFilters} className="text-sm text-red-500 hover:text-red-700 font-medium ml-2">Clear all</button>
           </div>
         )}
       </section>
 
-      {/* Events + Map Section (two-column on md+) */}
-      <section className="max-w-6xl mx-auto px-4 py-12">
+      {/* Content: list or map */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-16">
         {loading && (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-600"></div>
+          <div className="flex justify-center py-16">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
           </div>
         )}
 
-        {/* No results message */}
         {!loading && filteredEvents.length === 0 && (
-          <div className="text-center py-16">
-            <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="text-center py-20">
+            <svg className="w-16 h-16 mx-auto text-slate-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No events found</h3>
-            <p className="text-gray-400 mb-4">Try adjusting your filters or search terms</p>
-            <button
-              onClick={clearFilters}
-              className="px-6 py-2 bg-purple-600 text-white rounded-full font-medium hover:bg-purple-700 transition-colors"
-            >
+            <h3 className="text-xl font-semibold text-slate-600 mb-2">No events found</h3>
+            <p className="text-slate-400 mb-4">Try adjusting your search or filters</p>
+            <button onClick={clearFilters} className="px-6 py-2.5 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition-colors">
               Clear All Filters
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Left: Events list (1/3) */}
-          <div className="md:col-span-1 space-y-12">
-            {Object.entries(grouped).map(([month, items], idx) => (
-              <div 
-                key={month}
-                className="animate-fade-in-up"
-                style={{ animationDelay: `${idx * 100}ms` }}
-              >
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="bg-linear-to-r from-purple-600 to-blue-600 text-white rounded-full px-6 py-2 shadow-lg">
-                    <h2 className="text-xl font-bold">{month}</h2>
-                  </div>
-                  <div className="flex-1 h-px bg-linear-to-r from-purple-300 to-transparent"></div>
-                </div>
-                <div className="flex flex-col gap-6">
-                  {items.map((e, cardIdx) => (
-                    <div 
-                      key={e.title}
-                      className="animate-fade-in-up w-full"
-                      style={{ animationDelay: `${(idx * 100) + (cardIdx * 50)}ms` }}
-                    >
-                      <EventCard
-                        slug={e.slug || e.title.toLowerCase().replace(/\s+/g, '-')}
-                        title={e.title}
-                        description={e.description}
-                        date={e.date}
-                        image={e.image}
-                        location={e.location}
-                        distance={e.distance}
-                        rating={e.rating}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+        {!loading && filteredEvents.length > 0 && view === 'map' && (
+          <div className="mt-6">
+            <EventMap items={filteredEvents} fullScreen />
           </div>
+        )}
 
-          {/* Right: Map (2/3) */}
-          <aside className="md:col-span-2">
-            <div className="sticky top-24">
-              <EventMap items={filteredEvents} />
-            </div>
-          </aside>
-        </div>
+        {!loading && filteredEvents.length > 0 && view === 'list' && (
+          <div className="mt-6 space-y-4">
+            <p className="text-sm text-slate-500 mb-4">
+              {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''}
+            </p>
+            {filteredEvents.map((e, idx) => {
+              const slug = e.slug || e.title.toLowerCase().replace(/\s+/g, '-')
+              const minPrice = e.ticketTypes && e.ticketTypes.length > 0
+                ? Math.min(...e.ticketTypes.map(t => t.price))
+                : null
+              const totalAvail = e.totalAvailable ?? 0
+              const totalSold = e.totalSold ?? 0
+              const remaining = totalAvail - totalSold
+              const hasRealStats = e.totalAvailable !== undefined && e.totalAvailable > 0
+              const sellingFast = hasRealStats && remaining > 0 && remaining <= totalAvail * 0.2
+
+              return (
+                <Link
+                  key={slug}
+                  href={`/eventDetails?slug=${encodeURIComponent(slug)}`}
+                  className="block group"
+                  aria-label={`View details for ${e.title}`}
+                >
+                  <article
+                    className="bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-md transition-all duration-200 overflow-hidden animate-fade-in-up"
+                    style={{ animationDelay: `${idx * 30}ms` }}
+                  >
+                    <div className="flex flex-col sm:flex-row">
+                      {/* Thumbnail */}
+                      <div className="relative w-full sm:w-52 h-44 sm:h-auto shrink-0 bg-slate-100">
+                        {e.image ? (
+                          <Image
+                            src={e.image}
+                            alt={e.title}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 640px) 100vw, 208px"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          </div>
+                        )}
+                        {/* Category badge overlaying the image */}
+                        {e.sportCategory && (
+                          <span className="absolute top-2 left-2 text-xs font-semibold text-white bg-indigo-600/85 backdrop-blur-sm px-2.5 py-1 rounded-lg">
+                            {e.sportCategory}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
+                            <span className="font-medium text-indigo-600">{formatDate(e.date)}</span>
+                            {e.startTime && e.endTime && (
+                              <span>· {e.startTime} – {e.endTime}</span>
+                            )}
+                          </div>
+
+                          <h3 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                            {e.title}
+                          </h3>
+
+                          <p className="text-sm text-slate-500 line-clamp-2">{e.description}</p>
+
+                          <div className="flex items-center gap-4 text-sm text-slate-500 pt-1">
+                            {e.location && (
+                              <span className="flex items-center gap-1 truncate">
+                                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                {e.location}
+                              </span>
+                            )}
+                            {e.distance && (
+                              <span className="flex items-center gap-1 shrink-0">
+                                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                                {e.distance}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Bottom row: price + stats */}
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+                          <div className="flex items-center gap-3">
+                            {minPrice !== null && (
+                              <span className="text-base font-bold text-slate-900">From &euro;{minPrice}</span>
+                            )}
+                            {e.ticketTypes && e.ticketTypes.length > 1 && (
+                              <span className="text-xs text-slate-400">· {e.ticketTypes.length} types</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {hasRealStats && remaining <= 0 && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded">
+                                Sold out
+                              </span>
+                            )}
+                            {sellingFast && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded">
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg>
+                                Selling fast!
+                              </span>
+                            )}
+                            {hasRealStats && remaining > 0 && (
+                              <span className="text-xs text-slate-400">
+                                {remaining} ticket{remaining !== 1 ? 's' : ''} left
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                </Link>
+              )
+            })}
+          </div>
+        )}
       </section>
     </main>
   )

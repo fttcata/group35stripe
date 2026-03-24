@@ -7,6 +7,7 @@ export interface Ticket {
   qr_code_data: string;
   ticket_type: string;
   is_used: boolean;
+  check_in_code?: string;
 }
 
 /**
@@ -87,6 +88,10 @@ export async function createTickets(
 /**
  * Ensures all tickets have a check_in_code, backfilling any that are missing one.
  */
+function generateCheckInCode(): string {
+  return Math.random().toString(36).substring(2, 10).toUpperCase();
+}
+
 async function backfillCheckInCodes(tickets: Ticket[]): Promise<Ticket[]> {
   if (!supabase) return tickets;
 

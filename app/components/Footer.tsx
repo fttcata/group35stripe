@@ -3,22 +3,26 @@ import Image from 'next/image'
 
 export default function Footer() {
   return (
-    <footer className="mt-12 border-t bg-transparent border-gray-200/70">
-      <div className="max-w-4xl mx-auto px-4 py-8 text-sm text-gray-600">
-        <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-4">
-            <Image src="/eventify-logo.png" alt="Eventify" width={96} height={32} className="object-contain" />
-            <span className="text-xs text-gray-500">— Discover local events</span>
+    <footer className="border-t border-slate-200 bg-slate-50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Image src="/eventify-logo.png" alt="Eventify" width={24} height={24} className="object-contain rounded" />
+            <span className="text-sm font-semibold text-slate-900">Eventify</span>
+            <span className="text-xs text-slate-400">— Discover local events</span>
           </div>
 
-          <nav className="flex gap-4">
-            <Link href="#" className="hover:underline">About</Link>
-            <Link href="#" className="hover:underline">Contact</Link>
-            <Link href="#" className="hover:underline">Terms</Link>
+          <nav className="flex gap-6 text-sm text-slate-500">
+            <Link href="/events" className="hover:text-slate-900 transition-colors">Events</Link>
+            <Link href="#" className="hover:text-slate-900 transition-colors">About</Link>
+            <Link href="#" className="hover:text-slate-900 transition-colors">Contact</Link>
+            <Link href="#" className="hover:text-slate-900 transition-colors">Terms</Link>
           </nav>
         </div>
 
-        <div className="mt-6 text-xs text-gray-500">© {new Date().getFullYear()} Eventify. All rights reserved.</div>
+        <div className="mt-8 pt-6 border-t border-slate-200 text-xs text-slate-400">
+          &copy; {new Date().getFullYear()} Eventify. All rights reserved.
+        </div>
       </div>
     </footer>
   )

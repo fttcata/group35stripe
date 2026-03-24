@@ -23,6 +23,7 @@ type EventManagement = {
   tickets?: TicketInfo[]
   totalTickets?: number
   totalSold?: number
+  isCoOrganizer?: boolean
 }
 
 export default function MyEventsPage() {
@@ -30,6 +31,7 @@ export default function MyEventsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'published'>('all')
+  const [isOrganizer, setIsOrganizer] = useState(false)
 
   useEffect(() => {
     loadAllEvents()
@@ -50,11 +52,29 @@ export default function MyEventsPage() {
         return
       }
 
-      const { data, error: dbError } = await supabase
+      // Check if user has organizer role
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      const dbRole = (profile?.role || '').toLowerCase()
+      const metaRole = String(user.user_metadata?.role || '').toLowerCase()
+      const orgRole = dbRole === 'organizer' || dbRole === 'organiser' || metaRole === 'organizer' || metaRole === 'organiser'
+      setIsOrganizer(orgRole)
+
+      let { data, error: dbError } = await supabase
         .from('events')
         .select('id,title,description,start_date,sport_category,venue,images,status')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
+
+      // Dev fallback: seeded events have created_by = NULL
+      if (!dbError && (!data || data.length === 0)) {
+        const { data: unseeded, error: unseededErr } = await supabase
+          .from('events')
+          .select('id,title,description,start_date,sport_category,venue,images,status')
+          .is('created_by', null)
+          .order('created_at', { ascending: false })
+        data = unseeded || []
+        dbError = unseededErr
+      }
 
       if (dbError) {
         setError('Failed to load events')
@@ -62,9 +82,34 @@ export default function MyEventsPage() {
         return
       }
 
+      // Fetch events where user is an accepted co-organizer
+      const { data: coOrgEntries } = await supabase
+        .from('event_co_organizers')
+        .select('event_id')
+        .eq('user_id', user.id)
+        .eq('status', 'accepted')
+
+      let coOrgEvents: typeof data = []
+      if (coOrgEntries && coOrgEntries.length > 0) {
+        const coOrgIds = coOrgEntries.map(e => e.event_id)
+        const { data: coData } = await supabase
+          .from('events')
+          .select('id,title,description,start_date,sport_category,venue,images,status')
+          .in('id', coOrgIds)
+          .order('created_at', { ascending: false })
+        coOrgEvents = coData || []
+      }
+
+      // Merge, marking co-organizer events
+      const ownIds = new Set((data || []).map(e => e.id))
+      const allRawEvents = [
+        ...(data || []),
+        ...coOrgEvents.filter(e => !ownIds.has(e.id)).map(e => ({ ...e, isCoOrganizer: true })),
+      ]
+
       // Fetch ticket information for each event (non-blocking)
       const eventsWithTickets = await Promise.all(
-        (data || []).map(async (event) => {
+        allRawEvents.map(async (event) => {
           try {
             // Try to fetch tickets with quantity field
             const { data: tickets, error: ticketError } = await supabase
@@ -210,26 +255,28 @@ export default function MyEventsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading your events...</div>
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-500">Loading your events...</div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto px-4 py-10">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">My Events</h1>
-            <p className="text-gray-600 mt-2">Manage all your events in one place</p>
+            <h1 className="text-4xl font-bold text-slate-900">My Events</h1>
+            <p className="text-slate-500 mt-2">Manage all your events in one place</p>
           </div>
-          <Link
-            href="/submit-event"
-            className="rounded-full bg-purple-600 text-white px-6 py-3 font-semibold hover:bg-purple-700"
-          >
-            + Create Event
-          </Link>
+          {isOrganizer && (
+            <Link
+              href="/submit-event"
+              className="rounded-lg bg-indigo-500 text-white px-6 py-3 font-semibold hover:bg-indigo-600 transition-colors"
+            >
+              + Create Event
+            </Link>
+          )}
         </div>
 
         {error && (
@@ -240,17 +287,17 @@ export default function MyEventsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-lg p-6 shadow">
-            <p className="text-gray-600 text-sm mb-1">Total Events</p>
-            <p className="text-3xl font-bold text-gray-900">{allEvents.length}</p>
+          <div className="bg-white rounded-lg p-6 border border-slate-200">
+            <p className="text-slate-500 text-sm mb-1">Total Events</p>
+            <p className="text-3xl font-bold text-slate-900">{allEvents.length}</p>
           </div>
-          <div className="bg-white rounded-lg p-6 shadow">
-            <p className="text-gray-600 text-sm mb-1">Drafts</p>
-            <p className="text-3xl font-bold text-yellow-600">{draftCount}</p>
+          <div className="bg-white rounded-lg p-6 border border-slate-200">
+            <p className="text-slate-500 text-sm mb-1">Drafts</p>
+            <p className="text-3xl font-bold text-amber-600">{draftCount}</p>
           </div>
-          <div className="bg-white rounded-lg p-6 shadow">
-            <p className="text-gray-600 text-sm mb-1">Published</p>
-            <p className="text-3xl font-bold text-green-600">{publishedCount}</p>
+          <div className="bg-white rounded-lg p-6 border border-slate-200">
+            <p className="text-slate-500 text-sm mb-1">Published</p>
+            <p className="text-3xl font-bold text-emerald-600">{publishedCount}</p>
           </div>
         </div>
 
@@ -258,30 +305,30 @@ export default function MyEventsPage() {
         <div className="flex gap-4 mb-6">
           <button
             onClick={() => setFilterStatus('all')}
-            className={`px-4 py-2 rounded-lg font-semibold ${
+            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
               filterStatus === 'all'
-                ? 'bg-purple-600 text-white'
-                : 'bg-white text-gray-900 border border-gray-200'
+                ? 'bg-indigo-500 text-white'
+                : 'bg-white text-slate-900 border border-slate-200 hover:bg-slate-50'
             }`}
           >
             All ({allEvents.length})
           </button>
           <button
             onClick={() => setFilterStatus('draft')}
-            className={`px-4 py-2 rounded-lg font-semibold ${
+            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
               filterStatus === 'draft'
-                ? 'bg-yellow-500 text-white'
-                : 'bg-white text-gray-900 border border-gray-200'
+                ? 'bg-indigo-500 text-white'
+                : 'bg-white text-slate-900 border border-slate-200 hover:bg-slate-50'
             }`}
           >
             Drafts ({draftCount})
           </button>
           <button
             onClick={() => setFilterStatus('published')}
-            className={`px-4 py-2 rounded-lg font-semibold ${
+            className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
               filterStatus === 'published'
-                ? 'bg-green-600 text-white'
-                : 'bg-white text-gray-900 border border-gray-200'
+                ? 'bg-indigo-500 text-white'
+                : 'bg-white text-slate-900 border border-slate-200 hover:bg-slate-50'
             }`}
           >
             Published ({publishedCount})
@@ -290,11 +337,11 @@ export default function MyEventsPage() {
 
         {/* Events List */}
         {filteredEvents.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-600 mb-4">No {filterStatus === 'all' ? '' : filterStatus} events yet</p>
+          <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
+            <p className="text-slate-500 mb-4">No {filterStatus === 'all' ? '' : filterStatus} events yet</p>
             <Link
               href="/submit-event"
-              className="text-purple-600 hover:text-purple-700 font-semibold"
+              className="text-indigo-500 hover:text-indigo-600 font-semibold"
             >
               Create your first event
             </Link>
@@ -304,7 +351,7 @@ export default function MyEventsPage() {
             {filteredEvents.map((event) => (
               <div
                 key={event.id}
-                className="bg-white rounded-lg p-6 shadow hover:shadow-lg transition-shadow"
+                className="bg-white rounded-lg p-6 border border-slate-200 hover:border-slate-300 transition-colors"
               >
                 <div className="flex gap-6">
                   {event.images?.[0] && (
@@ -318,19 +365,24 @@ export default function MyEventsPage() {
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">{event.title}</h3>
+                          <h3 className="text-lg font-semibold text-slate-900">{event.title}</h3>
                           <span
-                            className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                            className={`text-xs px-3 py-1 rounded-lg font-semibold ${
                               event.status === 'draft'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-green-100 text-green-800'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-emerald-50 text-emerald-700'
                             }`}
                           >
                             {event.status === 'draft' ? 'Draft' : 'Published'}
                           </span>
+                          {event.isCoOrganizer && (
+                            <span className="text-xs px-3 py-1 rounded-lg font-semibold bg-indigo-50 text-indigo-700">
+                              Co-Organizer
+                            </span>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{event.description}</p>
-                        <div className="flex gap-4 text-sm text-gray-500 mb-4">
+                        <p className="text-sm text-slate-500 mb-3 line-clamp-2">{event.description}</p>
+                        <div className="flex gap-4 text-sm text-slate-400 mb-4">
                           <span>{new Date(event.start_date).toLocaleDateString()}</span>
                           <span>•</span>
                           <span>{event.sport_category}</span>
@@ -340,12 +392,12 @@ export default function MyEventsPage() {
                         
                         {/* Ticket Stats */}
                         {event.tickets && event.tickets.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="mt-3 pt-3 border-t border-slate-200">
                             <div className="flex flex-wrap gap-6 text-sm">
                               {(event.totalTickets || 0) > 0 && (
                                 <div>
-                                  <span className="text-gray-500">Tickets: </span>
-                                  <span className="font-semibold text-gray-900">
+                                  <span className="text-slate-500">Tickets: </span>
+                                  <span className="font-semibold text-slate-900">
                                     {event.totalSold || 0}/{event.totalTickets}
                                   </span>
                                   {event.totalTickets && event.totalSold === event.totalTickets && event.totalTickets > 0 && (
@@ -374,20 +426,20 @@ export default function MyEventsPage() {
                   <div className="flex flex-col gap-2 self-center">
                     <Link
                       href={`/submit-event?id=${event.id}`}
-                      className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 text-center"
+                      className="px-4 py-2 rounded-lg bg-indigo-500 text-white font-semibold hover:bg-indigo-600 text-center transition-colors"
                     >
                       Edit
                     </Link>
                     <Link
                       href={`/my-events/${event.id}/staff`}
-                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 text-center"
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 text-center transition-colors"
                     >
                       Staff
                     </Link>
                     {event.status === 'published' && (
                       <button
                         onClick={() => handleUnpublish(event.id)}
-                        className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold hover:bg-orange-600"
+                        className="px-4 py-2 rounded-lg border border-amber-200 text-amber-700 font-semibold hover:bg-amber-50 transition-colors"
                       >
                         Unpublish
                       </button>
@@ -408,7 +460,7 @@ export default function MyEventsPage() {
         <div className="mt-8">
           <Link
             href="/events"
-            className="text-purple-600 hover:text-purple-700 font-semibold"
+            className="text-indigo-500 hover:text-indigo-600 font-semibold"
           >
             ← Back to Public Events
           </Link>

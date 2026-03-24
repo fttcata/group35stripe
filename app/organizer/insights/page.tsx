@@ -147,7 +147,7 @@ function RechartsBarCard({
                 width={56}
               />
               <Tooltip
-                formatter={(value: number) => (tooltipFormatter ? tooltipFormatter(Number(value)) : Number(value))}
+                formatter={(value) => (tooltipFormatter ? tooltipFormatter(Number(value)) : Number(value))}
                 contentStyle={{ borderRadius: 10, borderColor: '#cbd5e1' }}
                 labelStyle={{ color: '#0f172a', fontWeight: 600 }}
               />
@@ -196,7 +196,7 @@ function RechartsCategoryBarCard({
               />
               <YAxis stroke="#475569" tick={{ fontSize: 11 }} width={56} />
               <Tooltip
-                formatter={(value: number) =>
+                formatter={(value) =>
                   valueFormatter ? valueFormatter(Number(value)) : Number(value)
                 }
                 contentStyle={{ borderRadius: 10, borderColor: '#cbd5e1' }}
@@ -298,7 +298,7 @@ export default function OrganizerInsightsPage() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
       <section className="border-b border-slate-200 bg-white">
         <div className="max-w-6xl mx-auto px-4 py-8 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -415,7 +415,7 @@ export default function OrganizerInsightsPage() {
                       <div key={row.eventId} className="rounded-lg border border-slate-200 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-semibold text-slate-900">{row.title}</p>
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${row.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{row.status}</span>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${row.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{row.status}</span>
                         </div>
                         <p className="text-xs text-slate-500 mt-1">{formatDate(row.startDate)}</p>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-700">

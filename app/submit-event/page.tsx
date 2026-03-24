@@ -48,7 +48,25 @@ export default function SubmitEventPage() {
   const [publishSuccess, setPublishSuccess] = useState(false)
   const [dateWarning, setDateWarning] = useState('')
   const [venueWarning, setVenueWarning] = useState('')
+  const [roleChecked, setRoleChecked] = useState(false)
+  const [isOrganizer, setIsOrganizer] = useState(false)
   const isEditing = !!eventId
+
+  // Role guard — only organizers may create/edit events
+  useEffect(() => {
+    const checkRole = async () => {
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setRoleChecked(true); return }
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      const dbRole = (profile?.role || '').toLowerCase()
+      const metaRole = String(user.user_metadata?.role || '').toLowerCase()
+      const orgRole = dbRole === 'organizer' || dbRole === 'organiser' || metaRole === 'organizer' || metaRole === 'organiser'
+      setIsOrganizer(orgRole)
+      setRoleChecked(true)
+    }
+    checkRole()
+  }, [])
 
   // Load event data for editing
   useEffect(() => {
@@ -171,6 +189,7 @@ export default function SubmitEventPage() {
         location: event.venue,
         locationUrl: event.location_url || '',
         image: event.images?.[0] || '',
+        status: event.status || 'draft',
       }
 
       setFormData(newFormData)
@@ -230,6 +249,18 @@ export default function SubmitEventPage() {
   const validateRequiredFields = (): boolean => {
     if (!formData.title || !formData.description || !formData.date || !formData.location || !formData.startTime || !formData.endTime) {
       setError('Please fill in all required fields')
+      return false
+    }
+
+    // Google Maps link is required so the event appears on the map
+    if (!formData.locationUrl) {
+      setError('Please provide a Google Maps link so your event can be shown on the map')
+      return false
+    }
+
+    const coords = extractCoordsFromGoogleMapsUrl(formData.locationUrl)
+    if (!coords) {
+      setError('Could not extract coordinates from the Google Maps link. Please provide a valid link containing coordinates.')
       return false
     }
 
@@ -371,9 +402,19 @@ export default function SubmitEventPage() {
             originalEventData.startTime !== formData.startTime
           const venueChanged = originalEventData.location !== formData.location
           
-          if ((dateChanged || venueChanged) && originalEventData.status === 'published') {
-            // In a real app, send email notifications here
-            console.log('Should notify ticket holders of changes:', { dateChanged, venueChanged })
+          if ((dateChanged || venueChanged) && (originalEventData.status === 'published' || publish)) {
+            try {
+              await fetch('/api/notifications/send-event-change', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  eventId,
+                  changes: { dateChanged, venueChanged },
+                }),
+              })
+            } catch (err) {
+              console.error('Failed to send change notifications:', err)
+            }
           }
         }
 
@@ -464,34 +505,53 @@ export default function SubmitEventPage() {
     setPendingPublish(false)
   }
 
-  if (isLoading) {
+  if (isLoading || !roleChecked) {
     return (
-      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading event...</div>
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-500">Loading event...</div>
+      </main>
+    )
+  }
+
+  if (!isOrganizer) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-xl border border-red-200 p-8 text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full">
+            <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">Organizer Access Required</h1>
+          <p className="text-slate-500 text-sm">Only organizer accounts can create or edit events. If you believe this is an error, contact support.</p>
+          <Link href="/events" className="inline-block rounded-lg bg-indigo-500 text-white px-6 py-2.5 font-semibold hover:bg-indigo-600 transition-colors">
+            Browse Events
+          </Link>
+        </div>
       </main>
     )
   }
 
   if (isSubmitting) {
     return (
-      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center">
-        <div className="text-gray-600">{isEditing ? 'Updating...' : 'Submitting...'}</div>
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-500">{isEditing ? 'Updating...' : 'Submitting...'}</div>
       </main>
     )
   }
 
   if (publishSuccess) {
     return (
-      <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8 text-center space-y-6">
-          <div className="text-6xl">✅</div>
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 p-8 text-center space-y-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-50 rounded-full">
+            <svg className="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+          </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-green-600">{isEditing ? 'Event Updated!' : 'Event Published!'}</h1>
-            <p className="text-gray-600">{isEditing ? 'Your event has been successfully updated.' : 'Your event has been successfully published and is now live.'}</p>
+            <h1 className="text-2xl font-bold text-slate-900">{isEditing ? 'Event Updated!' : 'Event Published!'}</h1>
+            <p className="text-slate-500">{isEditing ? 'Your event has been successfully updated.' : 'Your event has been successfully published and is now live.'}</p>
           </div>
           <button
             onClick={() => router.push(isEditing ? '/my-events' : '/events')}
-            className="w-full rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700"
+            className="w-full rounded-lg bg-indigo-500 text-white py-3 font-semibold hover:bg-indigo-600 transition-colors"
           >
             {isEditing ? 'Back to My Events' : 'View All Events'}
           </button>
@@ -501,27 +561,27 @@ export default function SubmitEventPage() {
   }
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-purple-50 via-blue-50 to-pink-50">
+    <main className="min-h-screen bg-slate-50">
       <div className="max-w-2xl mx-auto px-4 py-10">
         <div className="flex justify-between items-center mb-6">
-          <Link href="/events" className="text-sm text-purple-700 hover:text-purple-900">
+          <Link href="/events" className="text-sm text-indigo-500 hover:text-indigo-600 transition-colors">
             ← Back to Events
           </Link>
           <div className="flex gap-4">
-            <Link href="/my-events" className="text-sm text-purple-700 hover:text-purple-900 font-semibold">
+            <Link href="/my-events" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
               My Events
             </Link>
-            <Link href="/drafts" className="text-sm text-purple-700 hover:text-purple-900 font-semibold">
+            <Link href="/drafts" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
               Drafts
             </Link>
           </div>
         </div>
 
-        <div className="mt-8 bg-white rounded-2xl shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <div className="mt-8 bg-white rounded-xl border border-slate-200 p-8">
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">
             {isEditing ? 'Edit Event' : 'Submit New Event'}
           </h1>
-          <p className="text-gray-600 mb-6">
+          <p className="text-slate-500 mb-6">
             {isEditing ? 'Update your event details' : 'Create and share your event with the community'}
           </p>
 
@@ -546,7 +606,7 @@ export default function SubmitEventPage() {
 
             {/* Title */}
             <div>
-              <label htmlFor="title" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-1">
                 Event Title *
               </label>
               <input
@@ -556,14 +616,14 @@ export default function SubmitEventPage() {
                 value={formData.title}
                 onChange={handleChange}
                 placeholder="e.g., Community Marathon 2026"
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 required
               />
             </div>
 
             {/* Description */}
             <div>
-              <label htmlFor="description" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-1">
                 Description *
               </label>
               <textarea
@@ -573,14 +633,14 @@ export default function SubmitEventPage() {
                 onChange={handleChange}
                 placeholder="Describe your event in detail..."
                 rows={4}
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 required
               />
             </div>
 
             {/* Date */}
             <div>
-              <label htmlFor="date" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label htmlFor="date" className="block text-sm font-medium text-slate-700 mb-1">
                 Event Date *
               </label>
               <input
@@ -589,7 +649,7 @@ export default function SubmitEventPage() {
                 name="date"
                 value={formData.date}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 required
               />
             </div>
@@ -597,7 +657,7 @@ export default function SubmitEventPage() {
             {/* Start and End Time */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="startTime" className="block text-sm font-semibold text-gray-900 mb-2">
+                <label htmlFor="startTime" className="block text-sm font-medium text-slate-700 mb-1">
                   Start Time *
                 </label>
                 <input
@@ -606,12 +666,12 @@ export default function SubmitEventPage() {
                   name="startTime"
                   value={formData.startTime}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                   required
                 />
               </div>
               <div>
-                <label htmlFor="endTime" className="block text-sm font-semibold text-gray-900 mb-2">
+                <label htmlFor="endTime" className="block text-sm font-medium text-slate-700 mb-1">
                   End Time *
                 </label>
                 <input
@@ -620,7 +680,7 @@ export default function SubmitEventPage() {
                   name="endTime"
                   value={formData.endTime}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                  className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                   required
                 />
               </div>
@@ -628,7 +688,7 @@ export default function SubmitEventPage() {
 
             {/* Sport Category */}
             <div>
-              <label htmlFor="sportCategory" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label htmlFor="sportCategory" className="block text-sm font-medium text-slate-700 mb-1">
                 Sport Category *
               </label>
               <select
@@ -636,7 +696,7 @@ export default function SubmitEventPage() {
                 name="sportCategory"
                 value={formData.sportCategory}
                 onChange={handleChange}
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 required
               >
                 {SPORT_CATEGORIES.map((category) => (
@@ -649,7 +709,7 @@ export default function SubmitEventPage() {
 
             {/* Location */}
             <div>
-              <label htmlFor="location" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label htmlFor="location" className="block text-sm font-medium text-slate-700 mb-1">
                 Location *
               </label>
               <input
@@ -659,7 +719,7 @@ export default function SubmitEventPage() {
                 value={formData.location}
                 onChange={handleChange}
                 placeholder="e.g., Central Park, Downtown"
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                 required
               />
             </div>
@@ -667,29 +727,29 @@ export default function SubmitEventPage() {
             {/* Location URL */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label htmlFor="locationUrl" className="block text-sm font-semibold text-gray-900">
-                  Google Maps Link (optional)
+                <label htmlFor="locationUrl" className="block text-sm font-medium text-slate-700">
+                  Google Maps Link *
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowLocationHelp(!showLocationHelp)}
-                  className="text-xs text-purple-600 hover:text-purple-700 font-medium underline"
+                  className="text-xs text-indigo-500 hover:text-indigo-600 font-medium underline"
                 >
                   {showLocationHelp ? 'Hide help' : 'How to get a Maps link?'}
                 </button>
               </div>
 
               {showLocationHelp && (
-                <div className="mb-3 rounded-lg bg-purple-50 border border-purple-200 p-4 text-sm text-purple-900 space-y-2">
-                  <p className="font-semibold">How to get a Google Maps link with coordinates:</p>
+                <div className="mb-3 rounded-lg bg-indigo-50 border border-indigo-200 p-4 text-sm text-slate-700 space-y-2">
+                  <p className="font-semibold text-slate-900">How to get a Google Maps link with coordinates:</p>
                   <ol className="list-decimal list-inside space-y-1">
-                    <li>Open <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google Maps</a> and search for your venue.</li>
+                    <li>Open <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer" className="underline font-medium text-indigo-600">Google Maps</a> and search for your venue.</li>
                     <li>Right-click (or long-press on mobile) on the exact location pin.</li>
                     <li>Click the coordinates that appear at the top of the context menu — they will be copied to your clipboard.</li>
-                    <li>Alternatively, copy the URL from your browser address bar — it contains the coordinates after the <code className="bg-purple-100 px-1 rounded">@</code> sign.</li>
+                    <li>Alternatively, copy the URL from your browser address bar — it contains the coordinates after the <code className="bg-indigo-100 px-1 rounded">@</code> sign.</li>
                   </ol>
-                  <p className="text-purple-700">Example URL: <code className="bg-purple-100 px-1 rounded text-xs break-all">https://www.google.com/maps/place/.../@53.3498,-6.2603,15z/...</code></p>
-                  <p className="text-purple-700 font-medium">Providing this link will place a marker for your event on the map!</p>
+                  <p className="text-slate-500">Example URL: <code className="bg-indigo-100 px-1 rounded text-xs break-all">https://www.google.com/maps/place/.../@53.3498,-6.2603,15z/...</code></p>
+                  <p className="text-indigo-600 font-medium">Providing this link will place a marker for your event on the map!</p>
                 </div>
               )}
 
@@ -700,7 +760,7 @@ export default function SubmitEventPage() {
                 value={formData.locationUrl}
                 onChange={handleChange}
                 placeholder="https://www.google.com/maps/place/.../@53.3498,-6.2603,15z"
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
               />
 
               {/* Coordinate extraction feedback */}
@@ -729,29 +789,57 @@ export default function SubmitEventPage() {
 
             {/* Image Upload */}
             <div>
-              <label htmlFor="image" className="block text-sm font-semibold text-gray-900 mb-2">
+              <label htmlFor="image" className="block text-sm font-medium text-slate-700 mb-1">
                 Event Image (optional)
               </label>
+
+              {/* Show current image when editing */}
+              {isEditing && formData.image && !imageFile && (
+                <div className="mb-3 rounded-lg border border-slate-200 p-3 bg-slate-50">
+                  <p className="text-xs font-medium text-slate-500 mb-2">Current image</p>
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={formData.image}
+                      alt="Current event image"
+                      className="w-24 h-16 rounded object-cover border border-slate-200"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-500 truncate">{formData.image}</p>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, image: '' }))}
+                        className="mt-1 text-xs text-red-500 hover:text-red-600 font-medium"
+                      >
+                        Remove image
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <input
                 type="file"
                 id="image"
                 accept="image/*"
                 onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-                className="w-full rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
               />
               {imageFile && (
-                <p className="text-sm text-gray-600 mt-1">Selected: {imageFile.name}</p>
+                <p className="text-sm text-slate-500 mt-1">Selected: {imageFile.name}</p>
+              )}
+              {isEditing && !imageFile && (
+                <p className="text-xs text-slate-400 mt-1">Upload a new file to replace the current image, or leave as is.</p>
               )}
             </div>
 
             {/* Ticket Types */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <label className="block text-sm font-semibold text-gray-900">
+                <label className="block text-sm font-medium text-slate-700">
                   Ticket Types & Prices *
                 </label>
                 {isEditing && ticketTypes.some(t => t.sold && t.sold > 0) && (
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-slate-400">
                     Ticket types with sales cannot be removed
                   </span>
                 )}
@@ -764,7 +852,7 @@ export default function SubmitEventPage() {
                       placeholder="Ticket name (e.g., General, Student)"
                       value={ticket.name}
                       onChange={(e) => handleTicketChange(index, 'name', e.target.value)}
-                      className="flex-1 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                      className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                       required
                     />
                     <input
@@ -774,7 +862,7 @@ export default function SubmitEventPage() {
                       step="0.01"
                       value={ticket.price || ''}
                       onChange={(e) => handleTicketChange(index, 'price', e.target.value)}
-                      className="w-32 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                      className="w-32 rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                       required
                     />
                     <input
@@ -783,7 +871,7 @@ export default function SubmitEventPage() {
                       min="0"
                       value={ticket.quantity || ''}
                       onChange={(e) => handleTicketChange(index, 'quantity', e.target.value)}
-                      className="w-28 rounded-lg border border-gray-200 px-4 py-2 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                      className="w-28 rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                       title="Total number of tickets available"
                       required
                     />
@@ -800,8 +888,8 @@ export default function SubmitEventPage() {
                     )}
                   </div>
                   {isEditing && ticket.sold !== undefined && ticket.sold > 0 && (
-                    <p className="text-sm text-blue-600 ml-1">
-                      📊 {ticket.sold} ticket{ticket.sold !== 1 ? 's' : ''} sold
+                    <p className="text-sm text-indigo-600 ml-1">
+                      {ticket.sold} ticket{ticket.sold !== 1 ? 's' : ''} sold
                     </p>
                   )}
                 </div>
@@ -809,7 +897,7 @@ export default function SubmitEventPage() {
               <button
                 type="button"
                 onClick={addTicketType}
-                className="text-sm text-purple-600 hover:text-purple-700 font-semibold"
+                className="text-sm text-indigo-500 hover:text-indigo-600 font-medium transition-colors"
               >
                 + Add Another Ticket Type
               </button>
@@ -821,7 +909,7 @@ export default function SubmitEventPage() {
                 type="button"
                 onClick={(e) => handleSubmit(e as React.FormEvent, false)}
                 disabled={isSubmitting}
-                className="flex-1 rounded-full bg-gray-200 text-gray-900 py-3 font-semibold hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 rounded-lg bg-slate-100 text-slate-700 py-3 font-semibold hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSubmitting ? (isEditing ? 'Saving Changes...' : 'Saving...') : (isEditing ? 'Save Changes' : 'Save as Draft')}
               </button>
@@ -835,13 +923,13 @@ export default function SubmitEventPage() {
                   setShowPublishModal(true)
                 }}
                 disabled={isSubmitting}
-                className="flex-1 rounded-full bg-purple-600 text-white py-3 font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 rounded-lg bg-indigo-500 text-white py-3 font-semibold hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSubmitting ? (isEditing ? 'Updating...' : 'Publishing...') : (isEditing ? 'Update & Publish' : 'Publish Event')}
               </button>
               <Link
                 href={isEditing ? '/my-events' : '/events'}
-                className="flex-1 rounded-full border border-gray-200 text-gray-900 py-3 font-semibold text-center hover:bg-gray-50"
+                className="flex-1 rounded-lg border border-slate-200 text-slate-700 py-3 font-semibold text-center hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </Link>

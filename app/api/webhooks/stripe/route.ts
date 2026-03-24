@@ -117,6 +117,34 @@ async function handleCheckoutSessionCompleted(
     if (tickets.length === 0) {
       tickets = await createTickets(orderId, eventName, 'Standard', quantity);
       console.log(`Created ${tickets.length} tickets for order ${orderId}`);
+
+      // Decrement ticket supply based on ticket type breakdown
+      const breakdownStr = session.metadata?.ticketBreakdown;
+      if (breakdownStr) {
+        try {
+          const breakdown: Array<{ ticketTypeId: string | null; quantity: number }> = JSON.parse(breakdownStr);
+          for (const item of breakdown) {
+            if (item.ticketTypeId && item.quantity > 0) {
+              const { data: currentType } = await supabase
+                .from('ticket_types')
+                .select('quantity')
+                .eq('id', item.ticketTypeId)
+                .single();
+
+              if (currentType) {
+                const newQty = Math.max(0, (currentType.quantity || 0) - item.quantity);
+                await supabase
+                  .from('ticket_types')
+                  .update({ quantity: newQty })
+                  .eq('id', item.ticketTypeId);
+                console.log(`Decremented ticket type ${item.ticketTypeId} by ${item.quantity} → ${newQty} remaining`);
+              }
+            }
+          }
+        } catch (parseErr) {
+          console.warn('Failed to parse ticketBreakdown metadata:', parseErr);
+        }
+      }
     } else {
       console.log(`Reusing ${tickets.length} existing tickets for order ${orderId}`);
     }
@@ -163,6 +191,27 @@ async function handleCheckoutSessionCompleted(
         .eq('id', orderId);
     } else {
       console.log('Confirmation email sent successfully:', emailResult.messageId);
+    }
+
+    // Create in-app notification if the buyer has a registered account
+    try {
+      const { data: buyerProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', customerEmail)
+        .maybeSingle();
+
+      if (buyerProfile?.id) {
+        await supabase.from('notifications').insert({
+          user_id: buyerProfile.id,
+          type: 'ticket_confirmation',
+          title: 'Tickets Confirmed',
+          message: `Your ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''} for “${eventName}” are confirmed and ready. Check your email for full details.`,
+          link: '/account',
+        });
+      }
+    } catch {
+      // Notifications table may not exist yet — don't fail the webhook
     }
   } catch (error) {
     console.error('Error handling checkout session completed:', error);

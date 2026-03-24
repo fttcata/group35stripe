@@ -44,6 +44,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
     }
 
+    // Look up the buyer's profile ID so we can store user_id on the order
+    // and show it in "My Purchases". This is best-effort — guests won't have one.
+    let buyerUserId: string | null = null;
+    try {
+      const { data: buyerProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+      buyerUserId = buyerProfile?.id ?? null;
+    } catch {
+      // ignore — guests have no profile
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([
@@ -53,6 +67,7 @@ export async function POST(req: NextRequest) {
           payment_method: 'pay-on-day',
           total_amount: amount,
           payment_status: 'pending',
+          user_id: buyerUserId,
         },
       ])
       .select('id')
@@ -91,6 +106,21 @@ export async function POST(req: NextRequest) {
       payment_method: 'pay-on-day',
       order_id: orderId,
     });
+
+    // Create in-app notification if user has an account
+    try {
+      if (buyerUserId) {
+        await supabase.from('notifications').insert({
+          user_id: buyerUserId,
+          type: 'ticket_confirmation',
+          title: 'Ticket Reserved — Pay on the Day',
+          message: `Your ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''} for “${eventTitle}” ${tickets.length !== 1 ? 'are' : 'is'} reserved. Please pay at the door on arrival.`,
+          link: '/account',
+        });
+      }
+    } catch {
+      // Notifications table may not exist yet — don't fail the checkout
+    }
 
     if (!emailResult.success) {
       return NextResponse.json(
