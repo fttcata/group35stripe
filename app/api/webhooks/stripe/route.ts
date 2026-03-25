@@ -165,6 +165,9 @@ async function handleCheckoutSessionCompleted(
             const ticketTypesObj = item.ticket_types as any;
             const ticketTypeName = ticketTypesObj?.name || (Array.isArray(ticketTypesObj) ? ticketTypesObj[0]?.name : undefined) || 'Standard';
 
+          const createdTickets = await createTickets(orderId, eventName, ticketTypeName, qty);
+          tickets.push(...createdTickets);
+
           if (item.ticket_type_id) {
             const { data: ticketTypeRow } = await supabase
               .from('ticket_types')
