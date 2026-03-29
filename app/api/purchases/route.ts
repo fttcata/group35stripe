@@ -29,7 +29,7 @@ export async function GET() {
           id,
           title,
           description,
-          date,
+          start_date,
           venue,
           sport_category,
           images
@@ -69,7 +69,7 @@ export async function GET() {
             id,
             title,
             description,
-            date,
+            start_date,
             venue,
             sport_category,
             images

@@ -9,13 +9,13 @@ export default function Hero() {
 
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 lg:py-32">
         <div className="max-w-2xl">
-          <p className="text-indigo-400 font-semibold text-sm tracking-wide uppercase mb-4">Irish sporting events</p>
+          <p className="text-indigo-400 font-semibold text-sm tracking-wide uppercase mb-4">Discover what&apos;s happening</p>
           <h1 className="text-4xl font-extrabold sm:text-5xl lg:text-6xl leading-tight tracking-tight">
-            Find your next
-            <span className="block text-indigo-400">sporting event</span>
+            Find events that
+            <span className="block text-indigo-400">inspire you</span>
           </h1>
           <p className="mt-6 text-lg text-slate-300 leading-relaxed max-w-lg">
-            Discover GAA matches, parkruns, charity 5Ks, and more across Ireland. Book your tickets in seconds.
+            Browse local meetups, workshops, and talks. Book seamlessly and join a community of curious minds.
           </p>
 
           <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">

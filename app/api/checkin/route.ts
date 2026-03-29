@@ -11,9 +11,15 @@ interface CheckInRequest {
   amount?: number;
   eventId?: string;
   quantity?: number;
+  items?: Array<{
+    ticketTypeId?: string;
+    name?: string;
+    price?: number;
+    quantity: number;
+  }>;
 }
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +40,9 @@ export async function POST(req: NextRequest) {
     const quantity = typeof body.quantity === 'number' && Number.isFinite(body.quantity) && body.quantity > 0
       ? Math.floor(body.quantity)
       : 1;
-    const eventIdForDb = eventId && UUID_REGEX.test(eventId) ? eventId : null;
+    const eventIdMatch = eventId?.match(UUID_REGEX);
+    const eventIdForDb = eventIdMatch ? eventIdMatch[0] : null;
+    const items = (body.items || []).filter(item => Number(item.quantity) > 0);
 
     if (!email || !email.includes('@')) {
       return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });
@@ -82,14 +90,15 @@ export async function POST(req: NextRequest) {
 
     const orderId = order.id as string;
 
+    const orderItems = (items.length > 0 ? items : [{ quantity }]).map(item => ({
+      order_id: orderId,
+      ticket_type_id: item.ticketTypeId || null,
+      quantity: Math.max(1, Number(item.quantity) || 1),
+    }));
+
     const { error: orderItemError } = await supabase
       .from('order_items')
-      .insert([
-        {
-          order_id: orderId,
-          quantity,
-        },
-      ]);
+      .insert(orderItems);
 
     if (orderItemError) {
       console.warn('Failed to create order_items row for check-in order:', orderItemError);

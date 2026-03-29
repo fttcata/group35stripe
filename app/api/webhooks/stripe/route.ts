@@ -68,16 +68,51 @@ async function handleCheckoutSessionCompleted(
       throw new Error(`Failed to find existing order: ${existingOrderError.message}`);
     }
 
+    // Try to resolve user_id from customer email
+    let resolvedUserId: string | null = null;
+    if (customerEmail) {
+      const { data: profileRows } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', customerEmail)
+        .limit(1);
+      if (profileRows && profileRows.length > 0) {
+        resolvedUserId = profileRows[0].id;
+      }
+    }
+
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id;
+    let chargeId: string | undefined;
+
+    if (paymentIntentId) {
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        if (typeof paymentIntent.latest_charge === 'string') {
+          chargeId = paymentIntent.latest_charge;
+        } else if (paymentIntent.latest_charge?.id) {
+          chargeId = paymentIntent.latest_charge.id;
+        }
+      } catch (err) {
+        console.warn('Failed to retrieve payment intent for charge id:', err);
+      }
+    }
+
     let orderData: { id: string } | null = null;
     if (existingOrder?.id) {
       const { data: updatedOrder, error: updateError } = await supabase
         .from('orders')
         .update({
           event_id: eventIdForDb,
+          user_id: resolvedUserId,
           customer_email: customerEmail,
           payment_method: 'stripe',
           total_amount: (session.amount_total || 0) / 100,
           payment_status: 'completed',
+          payment_intent_id: paymentIntentId || null,
+          charge_id: chargeId || null,
         })
         .eq('id', existingOrder.id)
         .select('id')
@@ -94,10 +129,13 @@ async function handleCheckoutSessionCompleted(
           {
             stripe_session_id: session.id,
             event_id: eventIdForDb,
+            user_id: resolvedUserId,
             customer_email: customerEmail,
             payment_method: 'stripe',
             total_amount: (session.amount_total || 0) / 100,
             payment_status: 'completed',
+            payment_intent_id: paymentIntentId || null,
+            charge_id: chargeId || null,
           },
         ])
         .select('id')
@@ -115,7 +153,39 @@ async function handleCheckoutSessionCompleted(
     // Create tickets only if they do not already exist (idempotent retries)
     let tickets = await getTicketsByOrderId(orderId);
     if (tickets.length === 0) {
-      tickets = await createTickets(orderId, eventName, 'Standard', quantity);
+      const { data: orderItems } = await supabase
+        .from('order_items')
+        .select('quantity,ticket_type_id,ticket_types(name)')
+        .eq('order_id', orderId);
+
+      if (orderItems && orderItems.length > 0) {
+        for (const item of orderItems) {
+          const qty = Math.max(1, Number(item.quantity) || 1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ticketTypesObj = item.ticket_types as any;
+            const ticketTypeName = ticketTypesObj?.name || (Array.isArray(ticketTypesObj) ? ticketTypesObj[0]?.name : undefined) || 'Standard';
+
+          const createdTickets = await createTickets(orderId, eventName, ticketTypeName, qty);
+          tickets.push(...createdTickets);
+
+          if (item.ticket_type_id) {
+            const { data: ticketTypeRow } = await supabase
+              .from('ticket_types')
+              .select('quantity_available')
+              .eq('id', item.ticket_type_id)
+              .single();
+
+            const newQty = Math.max(0, (ticketTypeRow?.quantity_available || 0) - qty);
+            await supabase
+              .from('ticket_types')
+              .update({ quantity_available: newQty })
+              .eq('id', item.ticket_type_id);
+          }
+        }
+      } else {
+        tickets = await createTickets(orderId, eventName, 'Standard', quantity);
+      }
+
       console.log(`Created ${tickets.length} tickets for order ${orderId}`);
 
       // Decrement ticket supply based on ticket type breakdown
@@ -238,6 +308,11 @@ async function handlePaymentIntentSucceeded(
       .from('orders')
       .update({
         payment_status: 'completed',
+        payment_intent_id: paymentIntent.id,
+        charge_id:
+          typeof paymentIntent.latest_charge === 'string'
+            ? paymentIntent.latest_charge
+            : paymentIntent.latest_charge?.id || null,
       })
       .eq('stripe_session_id', paymentIntent.id)
       .select()

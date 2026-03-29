@@ -149,8 +149,40 @@ These are intentionally lightweight and meant to cover the whole codebase at a h
 **Expected result:** CI runs successfully with branch-specific cache.
 **Notes:** Prevents cache poisoning across branches.
 
+### CI-019: Merge conflict marker check
+**Goal:** Catch unresolved merge conflicts before they reach build or deploy stages.
+**Steps:**
+1. Scan tracked source files for `<<<<<<<`, `=======`, or `>>>>>>>` markers.
+2. Fail the job if any marker is found.
+**Expected result:** No merge conflict markers exist in the repository.
+**Notes:** Very fast and easy to implement with a single `grep` command.
+
+### CI-020: Required file presence check
+**Goal:** Ensure the project keeps the minimum files needed for build and deployment.
+**Steps:**
+1. Verify the presence of key files such as `package.json`, `package-lock.json`, `next.config.ts`, and `tsconfig.json`.
+2. Verify critical API route files still exist.
+**Expected result:** All required files are present.
+**Notes:** Useful as a quick structural smoke test after refactors.
+
+### CI-021: Environment template check
+**Goal:** Ensure `.env.example` includes the core variables needed by contributors and CI.
+**Steps:**
+1. Check that `.env.example` exists.
+2. Verify it contains `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_BASE_URL`.
+**Expected result:** The environment template is present and includes the required keys.
+**Notes:** Easy to implement with a small shell loop.
+
+### CI-022: Database asset presence check
+**Goal:** Ensure the committed SQL setup files required for local and CI setup are available.
+**Steps:**
+1. Verify `db/schema.sql`, `db/seeds.sql`, `db/profiles.sql`, and `db/guest_checkout.sql` exist.
+**Expected result:** All expected database SQL files are present.
+**Notes:** Lightweight guard against accidental file deletion.
+
 ## Notes
 - These test cases are documented for Sprint 1; implementation can be staged later.
 - Adding a minimal `test` script and a test runner can be deferred to Sprint 2+.
 - Enhanced CI now includes security, quality, and monitoring jobs.
+- The newest additions are intentionally low-cost shell-based checks suited for quick CI wins.
 - Consider adding actual unit/integration tests in Sprint 2+ using Jest or Vitest.

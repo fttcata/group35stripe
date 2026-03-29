@@ -45,6 +45,10 @@ export async function POST(
 
     const { orderId } = await params;
     const paymentIntent = await stripe.paymentIntents.retrieve(body.paymentIntentId);
+    const chargeId =
+      typeof paymentIntent.latest_charge === 'string'
+        ? paymentIntent.latest_charge
+        : paymentIntent.latest_charge?.id;
 
     if (paymentIntent.status !== 'succeeded') {
       return NextResponse.json(
@@ -74,7 +78,7 @@ export async function POST(
 
     const { data: orderItems } = await supabase
       .from('order_items')
-      .select('quantity')
+      .select('quantity,ticket_type_id,ticket_types(name)')
       .eq('order_id', orderId);
 
     const quantity = (orderItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0) || 1;
@@ -105,6 +109,8 @@ export async function POST(
         payment_status: 'completed',
         payment_method: 'stripe-terminal',
         stripe_session_id: body.paymentIntentId,
+        payment_intent_id: body.paymentIntentId,
+        charge_id: chargeId || null,
       })
       .eq('id', orderId);
 
@@ -117,7 +123,32 @@ export async function POST(
 
     let tickets = await getTicketsByOrderId(orderId);
     if (tickets.length === 0) {
-      tickets = await createTickets(orderId, eventTitle, 'Standard', quantity);
+      if (orderItems && orderItems.length > 0) {
+        for (const item of orderItems) {
+          const qty = Math.max(1, Number(item.quantity) || 1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ticketTypesObj = item.ticket_types as any;
+            const ticketTypeName = ticketTypesObj?.name || (Array.isArray(ticketTypesObj) ? ticketTypesObj[0]?.name : undefined) || 'Standard';
+          const created = await createTickets(orderId, eventTitle, ticketTypeName, qty);
+          tickets = tickets.concat(created);
+
+          if (item.ticket_type_id) {
+            const { data: ticketTypeRow } = await supabase
+              .from('ticket_types')
+              .select('quantity_available')
+              .eq('id', item.ticket_type_id)
+              .single();
+
+            const newQty = Math.max(0, (ticketTypeRow?.quantity_available || 0) - qty);
+            await supabase
+              .from('ticket_types')
+              .update({ quantity_available: newQty })
+              .eq('id', item.ticket_type_id);
+          }
+        }
+      } else {
+        tickets = await createTickets(orderId, eventTitle, 'Standard', quantity);
+      }
     }
 
     const usedAt = new Date().toISOString();

@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
 
     const isPaid = order.payment_status === 'completed' || order.payment_status === 'paid';
     const tickets = order.tickets || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const alreadyUsed = tickets.some((t: any) => t.is_used);
 
     // If already checked in
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
 
     // If paid, mark all tickets as used
     if (isPaid) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ticketIds = tickets.map((t: any) => t.id);
       const { error: updateError } = await supabase
         .from('tickets')

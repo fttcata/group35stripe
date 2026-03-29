@@ -34,10 +34,26 @@ export default function DraftsPage() {
       setLoading(true)
       const supabase = createSupabaseBrowserClient()
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Please sign in to view your drafts')
+        setLoading(false)
+        return
+      }
+
+      // Check organizer role
+      const role = user.user_metadata?.role
+      if (role !== 'organizer') {
+        router.push('/')
+        return
+      }
+
       const { data, error: dbError } = await supabase
         .from('events')
         .select('id,title,description,start_date,sport_category,venue,images')
         .eq('status', 'draft')
+        .eq('created_by', user.id)
         .order('created_at', { ascending: false })
 
       if (dbError) {

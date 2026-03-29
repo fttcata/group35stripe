@@ -236,8 +236,8 @@ export default function EventsPage() {
   // ─── Organizer view (unchanged) ───────────────────────────
   if (isOrganizerView) {
     const today = new Date()
-    const publishedCount = allEvents.filter((e: any) => e.status === 'published').length
-    const draftCount = allEvents.filter((e: any) => e.status === 'draft').length
+    const publishedCount = allEvents.filter((e: Event & { status?: string }) => e.status === 'published').length
+    const draftCount = allEvents.filter((e: Event & { status?: string }) => e.status === 'draft').length
     const upcomingCount = allEvents.filter((e) => {
       const eventDate = new Date(e.date)
       return !Number.isNaN(eventDate.getTime()) && eventDate >= today
@@ -311,8 +311,8 @@ export default function EventsPage() {
                         <p className="text-sm text-slate-400 mt-1">{formatDate(e.date)}</p>
                         <p className="text-sm text-slate-400">{e.location || 'Location TBA'}</p>
                       </div>
-                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${(e as any).status === 'draft' ? 'bg-amber-600/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40'}`}>
-                        {(e as any).status === 'draft' ? 'Draft' : 'Published'}
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${(e as Event & { status?: string }).status === 'draft' ? 'bg-amber-600/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40'}`}>
+                        {(e as Event & { status?: string }).status === 'draft' ? 'Draft' : 'Published'}
                       </span>
                     </div>
                     <div className="mt-4 flex gap-2">

@@ -91,3 +91,74 @@ package-validation:
     key: ${CI_COMMIT_REF_SLUG}-protected
     paths:
       - node_modules/
+
+# Merge conflict marker check
+merge-conflict-check:
+  stage: test
+  script:
+    - |
+      echo "Checking for unresolved merge conflict markers..."
+      if grep -R -nE '^(<<<<<<<|=======|>>>>>>>)' \
+        --exclude-dir=.git \
+        --exclude-dir=node_modules \
+        --exclude-dir=.next \
+        .; then
+        echo "ERROR: Unresolved merge conflict markers found."
+        exit 1
+      fi
+      echo "No merge conflict markers found."
+
+# Required file presence smoke check
+required-files-check:
+  stage: test
+  script:
+    - |
+      echo "Checking required project files..."
+      required_files="
+      package.json
+      package-lock.json
+      next.config.ts
+      tsconfig.json
+      app/api/checkout/route.ts
+      app/api/events/route.ts
+      app/api/tickets/route.ts
+      app/api/webhooks/stripe/route.ts
+      "
+      for file in $required_files; do
+        if [ ! -f "$file" ]; then
+          echo "ERROR: Missing required file: $file"
+          exit 1
+        fi
+      done
+      echo "All required project files are present."
+
+# Environment template smoke check
+env-template-check:
+  stage: quality
+  script:
+    - |
+      echo "Checking .env.example for required keys..."
+      test -f .env.example || { echo "ERROR: .env.example is missing"; exit 1; }
+      required_keys="NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_BASE_URL"
+      for key in $required_keys; do
+        if ! grep -q "^${key}=" .env.example; then
+          echo "ERROR: Missing $key in .env.example"
+          exit 1
+        fi
+      done
+      echo ".env.example contains all required keys."
+
+# Database file presence smoke check
+db-files-check:
+  stage: quality
+  script:
+    - |
+      echo "Checking database SQL files..."
+      db_files="db/schema.sql db/seeds.sql db/profiles.sql db/guest_checkout.sql"
+      for file in $db_files; do
+        if [ ! -f "$file" ]; then
+          echo "ERROR: Missing database file: $file"
+          exit 1
+        fi
+      done
+      echo "All expected database files are present."

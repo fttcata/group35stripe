@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useMemo, useState, useEffect, use } from 'react'
+import { useState, useEffect, use } from 'react'
 import { events as eventsData, type Event } from '../data'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
@@ -139,24 +139,23 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
       event.ticketTypes.forEach((_, index) => {
         initial[index.toString()] = 0
       })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuantities(initial)
     }
   }, [event])
 
-  const totals = useMemo(() => {
+  const totals = (() => {
     if (!event || !event.ticketTypes) return { totalTickets: 0, totalPrice: 0 }
-    
+
     const totalTickets = event.ticketTypes.reduce((sum, _, index) => {
       return sum + (quantities[index.toString()] ?? 0)
     }, 0)
-    
+
     const totalPrice = event.ticketTypes.reduce((sum, ticket, index) => {
       return sum + (quantities[index.toString()] ?? 0) * ticket.price
     }, 0)
-    
+
     return { totalTickets, totalPrice }
-  }, [quantities, event])
+  })()
 
   const overMax = event?.ticketTypes?.some((_, index) => (quantities[index.toString()] ?? 0) > MAX_PER_TYPE) ?? false
   const hasMinimum = totals.totalTickets >= 1
@@ -188,6 +187,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
     }))
     
     // Redirect to checkout
+    // eslint-disable-next-line react-hooks/immutability
     window.location.href = '/buy'
   }
 

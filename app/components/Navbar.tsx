@@ -102,7 +102,7 @@ export default function Navbar() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <Image src="/eventify-logo.png" alt="Eventify" width={28} height={28} className="rounded" />
+          <Image src="/new_eventify_logo.png" alt="Eventify" width={28} height={28} className="rounded" />
           <span className="font-bold text-lg text-white tracking-tight">Eventify</span>
         </Link>
 
@@ -150,6 +150,16 @@ export default function Navbar() {
                     <p className="text-sm font-semibold text-slate-900 truncate">{user.email}</p>
                     <p className="text-xs text-slate-500 capitalize mt-0.5">{role || 'attendee'}</p>
                   </div>
+
+                  {user.email === 'admin@group35.com' && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-medium"
+                    >
+                      Admin Dashboard
+                    </Link>
+                  )}
 
                   <div className="py-1">
                     <Link

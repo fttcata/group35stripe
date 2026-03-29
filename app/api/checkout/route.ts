@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { supabase } from '../../../lib/supabaseClient';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { isAuthenticatedOrganizer } from '@/lib/organizerGuard';
 
 // Check if Stripe is configured
@@ -12,7 +13,7 @@ const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
 interface CheckoutRequest {
   eventName?: string;
@@ -20,6 +21,12 @@ interface CheckoutRequest {
   totalPrice?: number;
   quantity?: number;
   eventId?: string;
+  items?: Array<{
+    ticketTypeId?: string;
+    name?: string;
+    price?: number;
+    quantity: number;
+  }>;
   ticketBreakdown?: string;
   // Guest checkout fields
   isGuest?: boolean;
@@ -55,10 +62,12 @@ export async function POST(req: NextRequest) {
     const totalPrice = body.totalPrice || 1000; // in cents ($10.00 default)
     const quantity = body.quantity || 1;
     const eventId = body.eventId || 'unknown';
-    const eventIdForDb = UUID_REGEX.test(eventId) ? eventId : null;
+    const eventIdMatch = eventId.match(UUID_REGEX);
+    const eventIdForDb = eventIdMatch ? eventIdMatch[0] : null;
     const paymentMethod = body.paymentMethod || 'stripe';
     const customerEmail = body.customerEmail;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const items = (body.items || []).filter(item => Number(item.quantity) > 0);
 
     // Guest checkout info
     const isGuest = body.isGuest ?? true; // Default to guest checkout
@@ -76,6 +85,37 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+    let paymentIntentData: Stripe.Checkout.SessionCreateParams.PaymentIntentData | undefined;
+
+    if (supabase && eventIdForDb) {
+      const { data: eventRow } = await supabase
+        .from('events')
+        .select('created_by')
+        .eq('id', eventIdForDb)
+        .single();
+
+      if (eventRow?.created_by) {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('stripe_account_id')
+          .eq('id', eventRow.created_by)
+          .single();
+
+        const destinationAccount = profileRow?.stripe_account_id?.trim();
+        if (destinationAccount) {
+          const feePercent = Number(process.env.PLATFORM_FEE_PERCENT || 0);
+          const applicationFee = feePercent > 0
+            ? Math.round(totalPrice * (feePercent / 100))
+            : undefined;
+
+          paymentIntentData = {
+            transfer_data: { destination: destinationAccount },
+            ...(applicationFee ? { application_fee_amount: applicationFee } : {}),
+          };
+        }
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       customer_email: guestEmail || customerEmail || undefined,
@@ -96,6 +136,7 @@ export async function POST(req: NextRequest) {
       mode: 'payment',
       success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}&guest=true`,
       cancel_url: `${baseUrl}/cancel`,
+      payment_intent_data: paymentIntentData,
       metadata: {
         eventName,
         eventDate,
@@ -112,12 +153,23 @@ export async function POST(req: NextRequest) {
 
     // Store pending order in database with session ID
     if (supabase) {
+      // Try to get the authenticated user's ID
+      let userId: string | null = null;
+      try {
+        const authSupabase = await createSupabaseServerClient();
+        const { data: { user } } = await authSupabase.auth.getUser();
+        userId = user?.id ?? null;
+      } catch {
+        // Not authenticated - that's fine for guest checkout
+      }
+
       const { error } = await supabase
         .from('orders')
         .insert([
           {
             stripe_session_id: session.id,
             event_id: eventIdForDb,
+            user_id: userId,
             customer_email: guestEmail || customerEmail || null,
             payment_method: paymentMethod,
             total_amount: totalPrice / 100,
@@ -132,6 +184,28 @@ export async function POST(req: NextRequest) {
       if (error) {
         console.warn('Failed to create pending order:', error);
         // Don't fail the checkout if we can't store the order - Stripe webhook will handle it
+      } else {
+        const { data: orderRow } = await supabase
+          .from('orders')
+          .select('id')
+          .eq('stripe_session_id', session.id)
+          .single();
+
+        if (orderRow?.id) {
+          const orderItems = (items.length > 0 ? items : [{ quantity }]).map(item => ({
+            order_id: orderRow.id,
+            ticket_type_id: item.ticketTypeId || null,
+            quantity: Math.max(1, Number(item.quantity) || 1),
+          }));
+
+          const { error: orderItemError } = await supabase
+            .from('order_items')
+            .insert(orderItems);
+
+          if (orderItemError) {
+            console.warn('Failed to create order items:', orderItemError);
+          }
+        }
       }
     }
 

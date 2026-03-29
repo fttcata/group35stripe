@@ -18,6 +18,15 @@ function generateTicketCode(): string {
 }
 
 /**
+ * Generates a unique check-in code
+ */
+function generateCheckInCode(): string {
+  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `CHK-${timestamp}-${randomPart}`;
+}
+
+/**
  * Generates a QR code as a data URL containing ticket information
  */
 async function generateQRCode(ticketCode: string, eventTitle: string): Promise<string> {

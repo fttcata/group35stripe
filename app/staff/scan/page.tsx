@@ -44,6 +44,7 @@ function StaffScanPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const scanInFlightRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const barcodeDetectorRef = useRef<any>(null);
 
   const [terminal, setTerminal] = useState<Terminal | null>(null);
@@ -250,6 +251,7 @@ function StaffScanPage() {
 
   const playDuplicateAlertBeep = async () => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextCtor) return;
 
@@ -395,6 +397,7 @@ function StaffScanPage() {
 
     // Try native BarcodeDetector first when available.
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const BarcodeDetectorCtor = (globalThis as any).BarcodeDetector;
       if (BarcodeDetectorCtor) {
         if (!barcodeDetectorRef.current) {
@@ -798,6 +801,7 @@ function StaffScanPage() {
               {successMessage}
             </div>
           )}
+
 
           <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
             <p className="text-sm text-slate-700 mb-2">Manual code entry</p>

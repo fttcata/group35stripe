@@ -24,6 +24,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const staffEvents = (memberships || []).map((m: any) => ({
         eventId: m.event_id,
         title: m.events?.title || 'Event',
@@ -41,6 +42,7 @@ export async function GET() {
       return NextResponse.json({ error: ownedEventsError.message }, { status: 500 });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const organizerEvents = (ownedEvents || []).map((e: any) => ({
       eventId: e.id,
       title: e.title || 'Event',

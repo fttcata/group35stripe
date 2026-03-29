@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import StripeConnectButton from '@/app/account/StripeConnectButton'
 
 type TicketInfo = {
   name: string
@@ -12,7 +13,7 @@ type TicketInfo = {
 }
 
 type EventManagement = {
-  id: number
+  id: string
   title: string
   description: string
   start_date: string
@@ -32,6 +33,8 @@ export default function MyEventsPage() {
   const [error, setError] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'published'>('all')
   const [isOrganizer, setIsOrganizer] = useState(false)
+  const [payoutConnected, setPayoutConnected] = useState(false)
+  const [payoutChecked, setPayoutChecked] = useState(false)
 
   useEffect(() => {
     loadAllEvents()
@@ -53,11 +56,13 @@ export default function MyEventsPage() {
       }
 
       // Check if user has organizer role
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+      const { data: profile } = await supabase.from('profiles').select('role,stripe_account_id').eq('id', user.id).maybeSingle()
       const dbRole = (profile?.role || '').toLowerCase()
       const metaRole = String(user.user_metadata?.role || '').toLowerCase()
       const orgRole = dbRole === 'organizer' || dbRole === 'organiser' || metaRole === 'organizer' || metaRole === 'organiser'
       setIsOrganizer(orgRole)
+      setPayoutConnected(Boolean(profile?.stripe_account_id))
+      setPayoutChecked(true)
 
       let { data, error: dbError } = await supabase
         .from('events')
@@ -114,14 +119,14 @@ export default function MyEventsPage() {
             // Try to fetch tickets with quantity field
             const { data: tickets, error: ticketError } = await supabase
               .from('ticket_types')
-              .select('name,price,quantity')
+              .select('name,price,quantity,id')
               .eq('event_id', event.id)
 
             if (ticketError) {
               // If quantity column doesn't exist, try without it
               const { data: ticketsAlt, error: altError } = await supabase
                 .from('ticket_types')
-                .select('name,price')
+                .select('name,price,id')
                 .eq('event_id', event.id)
               
               if (altError) {
@@ -145,36 +150,57 @@ export default function MyEventsPage() {
               } as EventManagement
             }
 
-            // Try to fetch sold counts (non-blocking)
+            // Count sold tickets per event using completed orders
             let totalSold = 0
-            const ticketsWithSold: TicketInfo[] = []
-            
-            for (const ticket of tickets || []) {
-              let soldCount = 0
-              
-              // Try to count from tickets table
-              try {
-                const { data: soldTickets } = await supabase
-                  .from('tickets')
-                  .select('id', { count: 'exact', head: false })
-                  .eq('event_id', event.id)
+            const totalTickets = (tickets || []).reduce((sum, t) => sum + (t.quantity || 0), 0)
 
-                soldCount = soldTickets?.length || 0
-                totalSold += soldCount
-              } catch (err) {
-                // Tickets table might not exist yet, continue without sales data
-                console.debug(`Tickets table not available for event ${event.id}`)
+            try {
+              // Fetch all completed orders for this event
+              const { data: orders } = await supabase
+                .from('orders')
+                .select('id')
+                .eq('event_id', event.id)
+                .in('payment_status', ['completed', 'completed_email_failed'])
+
+              if (orders && orders.length > 0) {
+                const orderIds = orders.map(o => o.id)
+
+                // Prefer order_items quantity, then fallback to tickets count
+                const { data: orderItems } = await supabase
+                  .from('order_items')
+                  .select('quantity')
+                  .in('order_id', orderIds)
+
+                if (orderItems && orderItems.length > 0) {
+                  totalSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+                } else {
+                  // Fallback: count tickets rows
+                  const { data: ticketRows } = await supabase
+                    .from('tickets')
+                    .select('id, order_id')
+                    .in('order_id', orderIds)
+
+                  if (ticketRows && ticketRows.length > 0) {
+                    const ticketsByOrder: Record<string, number> = {}
+                    for (const t of ticketRows) {
+                      ticketsByOrder[t.order_id] = (ticketsByOrder[t.order_id] || 0) + 1
+                    }
+                    totalSold = Object.values(ticketsByOrder).reduce((sum, qty) => sum + qty, 0)
+                  }
+                }
               }
-
-              ticketsWithSold.push({
-                name: ticket.name,
-                price: ticket.price,
-                quantity: ticket.quantity || 0,
-                sold: soldCount,
-              })
+            } catch (err) {
+              // If error fetching sold counts, continue with totalSold = 0
+              console.debug(`Error counting sold tickets for event ${event.id}:`, err)
             }
 
-            const totalTickets = ticketsWithSold.reduce((sum, t) => sum + (t.quantity || 0), 0)
+            // Build ticket info with per-type sold counts (if needed for display)
+            const ticketsWithSold: TicketInfo[] = (tickets || []).map(t => ({
+              name: t.name,
+              price: t.price,
+              quantity: t.quantity || 0,
+              sold: 0, // Per-ticket-type sold count not tracked; use totalSold for event-level
+            }))
 
             return {
               ...event,
@@ -199,21 +225,15 @@ export default function MyEventsPage() {
     }
   }
 
-  const handleDeleteEvent = async (id: number, title: string) => {
+  const handleDeleteEvent = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete "${title}"?`)) return
 
     try {
-      const supabase = createSupabaseBrowserClient()
-
-      // Delete event and its associated ticket types (cascade should handle this)
-      const { error: deleteError } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', id)
-
-      if (deleteError) {
-        setError('Failed to delete event')
-        console.error(deleteError)
+      const res = await fetch(`/api/events/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data?.error || 'Failed to delete event')
+        console.error(data)
         return
       }
 
@@ -224,7 +244,7 @@ export default function MyEventsPage() {
     }
   }
 
-  const handleUnpublish = async (id: number) => {
+  const handleUnpublish = async (id: string) => {
     try {
       const supabase = createSupabaseBrowserClient()
 
@@ -264,7 +284,7 @@ export default function MyEventsPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="max-w-6xl mx-auto px-4 py-10">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
+        <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-slate-900">My Events</h1>
             <p className="text-slate-500 mt-2">Manage all your events in one place</p>
@@ -272,7 +292,7 @@ export default function MyEventsPage() {
           {isOrganizer && (
             <Link
               href="/submit-event"
-              className="rounded-lg bg-indigo-500 text-white px-6 py-3 font-semibold hover:bg-indigo-600 transition-colors text-center"
+              className="rounded-lg bg-indigo-500 text-white px-6 py-3 font-semibold hover:bg-indigo-600 transition-colors"
             >
               + Create Event
             </Link>
@@ -286,7 +306,12 @@ export default function MyEventsPage() {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
+        {payoutChecked && (
+          <div className="mb-6">
+            <StripeConnectButton connected={payoutConnected} />
+          </div>
+        )}
+        <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-lg p-6 border border-slate-200">
             <p className="text-slate-500 text-sm mb-1">Total Events</p>
             <p className="text-3xl font-bold text-slate-900">{allEvents.length}</p>
@@ -302,7 +327,7 @@ export default function MyEventsPage() {
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex gap-4 mb-6">
           <button
             onClick={() => setFilterStatus('all')}
             className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
@@ -351,99 +376,112 @@ export default function MyEventsPage() {
             {filteredEvents.map((event) => (
               <div
                 key={event.id}
-                className="bg-white rounded-lg p-4 sm:p-6 border border-slate-200 hover:border-slate-300 transition-colors"
+                className="bg-white rounded-lg p-6 border border-slate-200 hover:border-slate-300 transition-colors"
               >
-                {/* Top row: image + title/meta */}
-                <div className="flex gap-4">
+                <div className="flex gap-6">
                   {event.images?.[0] && (
                     <img
                       src={event.images[0]}
                       alt={event.title}
-                      className="w-20 h-20 sm:w-28 sm:h-28 rounded-lg object-cover flex-shrink-0"
+                      className="w-32 h-32 rounded-lg object-cover"
                     />
                   )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h3 className="text-base sm:text-lg font-semibold text-slate-900 truncate">{event.title}</h3>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-lg font-semibold flex-shrink-0 ${
-                          event.status === 'draft'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-emerald-50 text-emerald-700'
-                        }`}
-                      >
-                        {event.status === 'draft' ? 'Draft' : 'Published'}
-                      </span>
-                      {event.isCoOrganizer && (
-                        <span className="text-xs px-2 py-0.5 rounded-lg font-semibold bg-indigo-50 text-indigo-700 flex-shrink-0">
-                          Co-Organizer
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-500 mb-2 line-clamp-2">{event.description}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-                      <span>{new Date(event.start_date).toLocaleDateString()}</span>
-                      <span>{event.sport_category}</span>
-                      <span className="truncate max-w-[140px]">{event.venue}</span>
-                    </div>
-
-                    {/* Ticket Stats */}
-                    {event.tickets && event.tickets.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-slate-100">
-                        <div className="flex flex-wrap gap-4 text-sm">
-                          {(event.totalTickets || 0) > 0 && (
-                            <div>
-                              <span className="text-slate-500">Tickets: </span>
-                              <span className="font-semibold text-slate-900">
-                                {event.totalSold || 0}/{event.totalTickets}
-                              </span>
-                              {event.totalTickets && event.totalSold === event.totalTickets && event.totalTickets > 0 && (
-                                <span className="ml-2 text-red-600 font-semibold">🔴 SOLD OUT</span>
-                              )}
-                            </div>
-                          )}
-                          {event.tickets.some(t => t.sold === t.quantity && t.quantity > 0) && (
-                            <div className="text-red-600 text-xs">
-                              {event.tickets
-                                .filter(t => t.sold === t.quantity && t.quantity > 0)
-                                .map(t => t.name)
-                                .join(', ')} sold out
-                            </div>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-slate-900">{event.title}</h3>
+                          <span
+                            className={`text-xs px-3 py-1 rounded-lg font-semibold ${
+                              event.status === 'draft'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                            }`}
+                          >
+                            {event.status === 'draft' ? 'Draft' : 'Published'}
+                          </span>
+                          {event.isCoOrganizer && (
+                            <span className="text-xs px-3 py-1 rounded-lg font-semibold bg-indigo-50 text-indigo-700">
+                              Co-Organizer
+                            </span>
                           )}
                         </div>
+                        <p className="text-sm text-slate-500 mb-3 line-clamp-2">{event.description}</p>
+                        <div className="flex gap-4 text-sm text-slate-400 mb-4">
+                          <span>{new Date(event.start_date).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span>{event.sport_category}</span>
+                          <span>•</span>
+                          <span>{event.venue}</span>
+                        </div>
+                        
+                        {/* Ticket Stats */}
+                        {event.tickets && event.tickets.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-200">
+                            <div className="flex flex-wrap gap-6 text-sm">
+                              {(event.totalTickets || 0) > 0 && (
+                                <div>
+                                  <span className="text-slate-500">Tickets Sold: </span>
+                                  <span className="font-semibold text-slate-900">
+                                    {event.totalSold || 0}/{event.totalTickets}
+                                  </span>
+                                  {event.totalTickets && event.totalSold === event.totalTickets && event.totalTickets > 0 && (
+                                    <span className="ml-2 text-red-600 font-semibold">🔴 SOLD OUT</span>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Show sold out ticket types */}
+                              {event.tickets.some(t => t.sold === t.quantity && t.quantity > 0) && (
+                                <div className="text-red-600 text-xs">
+                                  {event.tickets
+                                    .filter(t => t.sold === t.quantity && t.quantity > 0)
+                                    .map(t => t.name)
+                                    .join(', ')} sold out
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Action Buttons — full width row at the bottom on all screen sizes */}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    href={`/submit-event?id=${event.id}`}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-indigo-500 text-white font-semibold hover:bg-indigo-600 text-center transition-colors text-sm"
-                  >
-                    Edit
-                  </Link>
-                  <Link
-                    href={`/my-events/${event.id}/staff`}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-lg border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 text-center transition-colors text-sm"
-                  >
-                    Staff
-                  </Link>
-                  {event.status === 'published' && (
-                    <button
-                      onClick={() => handleUnpublish(event.id)}
-                      className="flex-1 sm:flex-none px-4 py-2 rounded-lg border border-amber-200 text-amber-700 font-semibold hover:bg-amber-50 transition-colors text-sm"
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-2 self-center">
+                    <Link
+                      href={`/my-events/${event.id}/sales`}
+                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 text-center"
                     >
-                      Unpublish
+                      View Sales
+                    </Link>
+                    <Link
+                      href={`/submit-event?id=${event.id}`}
+                      className="px-4 py-2 rounded-lg bg-indigo-500 text-white font-semibold hover:bg-indigo-600 text-center transition-colors"
+                    >
+                      Edit
+                    </Link>
+                    <Link
+                      href={`/my-events/${event.id}/staff`}
+                      className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 text-center transition-colors"
+                    >
+                      Staff
+                    </Link>
+                    {event.status === 'published' && (
+                      <button
+                        onClick={() => handleUnpublish(event.id)}
+                        className="px-4 py-2 rounded-lg border border-amber-200 text-amber-700 font-semibold hover:bg-amber-50 transition-colors"
+                      >
+                        Unpublish
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteEvent(event.id, event.title)}
+                      className="px-4 py-2 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 font-semibold"
+                    >
+                      Delete
                     </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteEvent(event.id, event.title)}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 font-semibold text-sm"
-                  >
-                    Delete
-                  </button>
+                  </div>
                 </div>
               </div>
             ))}
