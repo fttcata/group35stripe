@@ -11,13 +11,10 @@ export interface Ticket {
 }
 
 /**
- * Generates a unique ticket code
+ * Generates a unique 6-digit numeric ticket code.
  */
 function generateTicketCode(): string {
-  // Format: TICKET-YYYYMMDD-XXXXXX (e.g., TICKET-20260211-AB12CD)
-  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `TICKET-${timestamp}-${randomPart}`;
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 /**
@@ -42,7 +39,9 @@ async function generateQRCode(ticketCode: string, eventTitle: string): Promise<s
 }
 
 /**
- * Creates tickets for an order in the database
+ * Creates tickets for an order in the database.
+ * All tickets in the order share a single QR code (the first ticket's code)
+ * so that scanning one QR reveals the entire order.
  */
 export async function createTickets(
   orderId: string,
@@ -52,14 +51,18 @@ export async function createTickets(
 ): Promise<Ticket[]> {
   const tickets: Ticket[] = [];
 
+  // Generate the primary ticket code + QR that represents this order
+  const primaryCode = generateTicketCode();
+  const sharedQrCode = await generateQRCode(primaryCode, eventTitle);
+
   for (let i = 0; i < quantity; i++) {
-    const ticketCode = generateTicketCode();
-    const qrCodeData = await generateQRCode(ticketCode, eventTitle);
+    const ticketCode = i === 0 ? primaryCode : generateTicketCode();
 
     tickets.push({
       id: crypto.randomUUID(),
       ticket_code: ticketCode,
-      qr_code_data: qrCodeData,
+      check_in_code: ticketCode, // same 6-digit code serves both purposes
+      qr_code_data: sharedQrCode, // all tickets share the primary QR
       ticket_type: ticketType,
       is_used: false,
     });
@@ -85,13 +88,6 @@ export async function createTickets(
   return tickets;
 }
 
-/**
- * Ensures all tickets have a check_in_code, backfilling any that are missing one.
- */
-function generateCheckInCode(): string {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
-}
-
 async function backfillCheckInCodes(tickets: Ticket[]): Promise<Ticket[]> {
   if (!supabase) return tickets;
 
@@ -100,7 +96,7 @@ async function backfillCheckInCodes(tickets: Ticket[]): Promise<Ticket[]> {
 
   const updated: Ticket[] = [...tickets];
   for (const ticket of needsCode) {
-    const code = generateCheckInCode();
+    const code = generateTicketCode();
     const { error } = await supabase
       .from('tickets')
       .update({ check_in_code: code })
@@ -134,7 +130,7 @@ export async function getTicketsByOrderId(orderId: string): Promise<Ticket[]> {
     throw new Error('Failed to retrieve tickets');
   }
 
-  return data || [];
+  return backfillCheckInCodes(data || []);
 }
 
 /**
