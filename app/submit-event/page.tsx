@@ -23,6 +23,7 @@ export default function SubmitEventPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const eventId = searchParams.get('id')
+  const openedFromAdmin = searchParams.get('from') === 'admin'
   
   const [formData, setFormData] = useState({
     title: '',
@@ -50,19 +51,38 @@ export default function SubmitEventPage() {
   const [venueWarning, setVenueWarning] = useState('')
   const [roleChecked, setRoleChecked] = useState(false)
   const [isOrganizer, setIsOrganizer] = useState(false)
+  const [isAdminUser, setIsAdminUser] = useState(false)
   const isEditing = !!eventId
+  const editReturnPath = (openedFromAdmin || isAdminUser) ? '/admin?tab=events' : '/my-events'
 
-  // Role guard — only organizers may create/edit events
+  // Role guard — organizers and admins may create/edit events
   useEffect(() => {
     const checkRole = async () => {
       const supabase = createSupabaseBrowserClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setRoleChecked(true); return }
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-      const dbRole = (profile?.role || '').toLowerCase()
-      const metaRole = String(user.user_metadata?.role || '').toLowerCase()
-      const orgRole = dbRole === 'organizer' || dbRole === 'organiser' || metaRole === 'organizer' || metaRole === 'organiser'
-      setIsOrganizer(orgRole)
+      const dbRole = String(profile?.role || '').trim().toLowerCase()
+      const metaRole = String(user.user_metadata?.role || '').trim().toLowerCase()
+      const email = String(user.email || '').trim().toLowerCase()
+      const canManageEvents =
+        dbRole === 'admin' ||
+        dbRole === 'administrator' ||
+        metaRole === 'admin' ||
+        metaRole === 'administrator' ||
+        dbRole === 'organizer' ||
+        dbRole === 'organiser' ||
+        metaRole === 'organizer' ||
+        metaRole === 'organiser' ||
+        email === 'admin@group35.com'
+      const isAdmin =
+        dbRole === 'admin' ||
+        dbRole === 'administrator' ||
+        metaRole === 'admin' ||
+        metaRole === 'administrator' ||
+        email === 'admin@group35.com'
+      setIsOrganizer(canManageEvents)
+      setIsAdminUser(isAdmin)
       setRoleChecked(true)
     }
     checkRole()
@@ -421,7 +441,7 @@ export default function SubmitEventPage() {
         if (publish) {
           setPublishSuccess(true)
         } else {
-          router.push('/my-events')
+          router.push(editReturnPath)
         }
       } else {
         // CREATE new event
@@ -520,8 +540,8 @@ export default function SubmitEventPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-red-50 rounded-full">
             <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
           </div>
-          <h1 className="text-xl font-bold text-slate-900">Organizer Access Required</h1>
-          <p className="text-slate-500 text-sm">Only organizer accounts can create or edit events. If you believe this is an error, contact support.</p>
+          <h1 className="text-xl font-bold text-slate-900">Organizer or Admin Access Required</h1>
+          <p className="text-slate-500 text-sm">Only organizer or admin accounts can create or edit events. If you believe this is an error, contact support.</p>
           <Link href="/events" className="inline-block rounded-lg bg-indigo-500 text-white px-6 py-2.5 font-semibold hover:bg-indigo-600 transition-colors">
             Browse Events
           </Link>
@@ -550,10 +570,10 @@ export default function SubmitEventPage() {
             <p className="text-slate-500">{isEditing ? 'Your event has been successfully updated.' : 'Your event has been successfully published and is now live.'}</p>
           </div>
           <button
-            onClick={() => router.push(isEditing ? '/my-events' : '/events')}
+            onClick={() => router.push(isEditing ? editReturnPath : '/events')}
             className="w-full rounded-lg bg-indigo-500 text-white py-3 font-semibold hover:bg-indigo-600 transition-colors"
           >
-            {isEditing ? 'Back to My Events' : 'View All Events'}
+            {isEditing ? (editReturnPath.startsWith('/admin') ? 'Back to Admin Dashboard' : 'Back to My Events') : 'View All Events'}
           </button>
         </div>
       </main>
@@ -568,8 +588,8 @@ export default function SubmitEventPage() {
             ← Back to Events
           </Link>
           <div className="flex gap-4">
-            <Link href="/my-events" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
-              My Events
+            <Link href={editReturnPath} className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
+              {editReturnPath.startsWith('/admin') ? 'Admin Dashboard' : 'My Events'}
             </Link>
             <Link href="/drafts" className="text-sm text-slate-600 hover:text-slate-900 font-medium transition-colors">
               Drafts
@@ -928,7 +948,7 @@ export default function SubmitEventPage() {
                 {isSubmitting ? (isEditing ? 'Updating...' : 'Publishing...') : (isEditing ? 'Update & Publish' : 'Publish Event')}
               </button>
               <Link
-                href={isEditing ? '/my-events' : '/events'}
+                href={isEditing ? editReturnPath : '/events'}
                 className="flex-1 rounded-lg border border-slate-200 text-slate-700 py-3 font-semibold text-center hover:bg-slate-50 transition-colors"
               >
                 Cancel
