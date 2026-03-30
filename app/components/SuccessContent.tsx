@@ -14,14 +14,6 @@ export default function SuccessContent() {
 
   const isCheckInPayment = paymentMethod === 'check-in';
 
-  // Webhook fallback: confirm the Stripe payment immediately so the order is
-  // marked 'completed' in the DB even if the webhook hasn't fired yet.
-  useEffect(() => {
-    if (!sessionId || isCheckInPayment) return;
-    fetch(`/api/checkout/verify?session_id=${encodeURIComponent(sessionId)}`)
-      .catch(() => { /* best-effort — webhook will handle it if this fails */ });
-  }, [sessionId, isCheckInPayment]);
-
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -43,7 +35,7 @@ export default function SuccessContent() {
         {isCheckInPayment ? 'Registration Confirmed!' : 'Payment Successful!'}
       </h1>
 
-      <p className="text-center text-slate-500 mb-8">
+      <p className="text-center text-gray-600 mb-8">
         {isCheckInPayment 
           ? `Thank you for registering. Your ticket confirmation has been sent to ${userEmail}. Please bring your confirmation to check-in and complete payment at the event.`
           : 'Thank you for your purchase. Your ticket has been confirmed and you are fully registered.'}
@@ -51,16 +43,16 @@ export default function SuccessContent() {
 
       {/* Order Details */}
       {!isLoading && (
-        <div className={`border rounded-lg p-6 mb-6 ${isCheckInPayment ? 'border-indigo-100 bg-indigo-50' : 'border-emerald-200 bg-emerald-50'}`}>
-          <p className="text-sm text-slate-500 mb-2">{isCheckInPayment ? 'Confirmation' : 'Order Confirmation'}</p>
-          <p className="font-mono text-sm text-slate-900 break-all mb-4">{sessionId || orderIdParam || new Date().toISOString()}</p>
+        <div className={`border rounded-lg p-6 mb-6 ${isCheckInPayment ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
+          <p className="text-sm text-gray-600 mb-2">{isCheckInPayment ? 'Confirmation' : 'Order Confirmation'}</p>
+          <p className="font-mono text-sm text-gray-900 break-all mb-4">{sessionId || orderIdParam || new Date().toISOString()}</p>
           {isCheckInPayment && userEmail && (
-            <div className="bg-white rounded p-3 mb-3 border border-indigo-100">
-              <p className="text-xs text-slate-500 mb-1">Confirmation sent to:</p>
-              <p className="font-semibold text-slate-900">{userEmail}</p>
+            <div className="bg-white rounded p-3 mb-3 border border-blue-100">
+              <p className="text-xs text-gray-600 mb-1">Confirmation sent to:</p>
+              <p className="font-semibold text-gray-900">{userEmail}</p>
             </div>
           )}
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-gray-500">
             {isCheckInPayment 
               ? 'Check your email for your receipt and confirmation details. Please bring this confirmation to the event.'
               : 'A confirmation email has been sent to your registered email address.'}

@@ -2,16 +2,13 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface CartData {
   event: { id: string; title: string; date: string };
   quantities: Record<string, number>;
-  ticketBreakdown?: Array<{ ticketTypeId: string | null; ticketTypeName: string; quantity: number; unitPrice: number }>;
   paymentOption: string;
   totalPrice: number;
   totalTickets: number;
-  ticketTypes?: Array<{ id?: string; name: string; price: number }>;
 }
 
 interface GuestInfo {
@@ -64,7 +61,6 @@ export default function BuyPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cartData, setCartData] = useState<CartData | null>(null);
-  const [isOrganizerUser, setIsOrganizerUser] = useState(false);
   
   // Guest checkout form state
   const [guestInfo, setGuestInfo] = useState<GuestInfo>({
@@ -81,35 +77,6 @@ export default function BuyPage() {
     if (saved) {
       setCartData(JSON.parse(saved));
     }
-  }, []);
-
-  useEffect(() => {
-    const loadRole = async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          setIsOrganizerUser(false);
-          return;
-        }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        const role = String(profile?.role || user.user_metadata?.role || '').toLowerCase();
-        setIsOrganizerUser(role === 'organizer' || role === 'organiser');
-      } catch {
-        setIsOrganizerUser(false);
-      }
-    };
-
-    loadRole();
   }, []);
 
   // Validate form on input change
@@ -157,19 +124,10 @@ export default function BuyPage() {
   };
 
   // Ticket details - from cart or defaults
-  const normalizedEventId = (() => {
-    const raw = cartData?.event?.id || ''
-    const directUuid = raw.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
-    if (directUuid) return raw
-
-    const embeddedUuid = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
-    return embeddedUuid ? embeddedUuid[0] : 'unknown'
-  })()
-
   const ticketDetails = cartData ? {
     eventName: cartData.event.title,
     eventDate: cartData.event.date,
-    eventId: normalizedEventId,
+    eventId: cartData.event.id,
     totalPrice: cartData.totalPrice,
     quantity: cartData.totalTickets,
   } : {
@@ -180,19 +138,7 @@ export default function BuyPage() {
     quantity: 1,
   };
 
-  const items = cartData?.ticketTypes?.map((ticket, index) => ({
-    ticketTypeId: ticket.id,
-    name: ticket.name,
-    price: ticket.price,
-    quantity: cartData.quantities[index.toString()] ?? 0,
-  })).filter((item) => item.quantity > 0) || [];
-
   const handleCheckout = async () => {
-    if (isOrganizerUser) {
-      setError('Organizers cannot buy tickets. Use an attendee account to purchase tickets.');
-      return;
-    }
-
     // Validate guest form first
     if (!validateForm()) {
       setError('Please fill in all required fields correctly');
@@ -231,9 +177,6 @@ export default function BuyPage() {
             eventTitle: ticketDetails.eventName,
             eventDate: ticketDetails.eventDate,
             amount: ticketDetails.totalPrice,
-            eventId: ticketDetails.eventId,
-            quantity: ticketDetails.quantity,
-            items,
           }),
         });
 
@@ -259,8 +202,6 @@ export default function BuyPage() {
           eventId: ticketDetails.eventId,
           totalPrice: Math.round(ticketDetails.totalPrice * 100), // Convert to cents
           quantity: ticketDetails.quantity,
-          items,
-          ticketBreakdown: cartData?.ticketBreakdown ? JSON.stringify(cartData.ticketBreakdown) : undefined,
           // Guest checkout info
           isGuest: true,
           guestName: guestInfo.name.trim(),
@@ -295,52 +236,52 @@ export default function BuyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="max-w-lg mx-auto px-4 py-16">
-        <div className="bg-white rounded-xl border border-slate-200 p-8">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Purchase Ticket</h1>
+    <div className="min-h-screen bg-gray-50 antialiased">
+      <main className="max-w-2xl mx-auto px-4 py-16">
+        <div className="bg-white rounded-lg shadow p-8">
+          <h1 className="text-3xl font-bold mb-8">Purchase Ticket</h1>
           
           {/* Ticket Details Card */}
-          <div className="rounded-lg bg-slate-50 border border-slate-200 p-5 mb-6">
-            <div className="space-y-3">
+          <div className="border border-gray-200 rounded-lg p-6 bg-gray-50 mb-6">
+            <div className="space-y-4">
               <div className="flex justify-between">
-                <span className="text-slate-500 text-sm">Event</span>
-                <span className="font-medium text-slate-900 text-sm">{ticketDetails.eventName}</span>
+                <span className="text-gray-600 font-medium">Event:</span>
+                <span className="font-semibold">{ticketDetails.eventName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 text-sm">Date</span>
-                <span className="font-medium text-slate-900 text-sm">{ticketDetails.eventDate}</span>
+                <span className="text-gray-600 font-medium">Date:</span>
+                <span className="font-semibold">{ticketDetails.eventDate}</span>
               </div>
-              <div className="border-t border-slate-200 pt-3 flex justify-between">
-                <span className="text-slate-500 text-sm">Quantity</span>
-                <span className="font-medium text-slate-900 text-sm">{ticketDetails.quantity}</span>
+              <div className="border-t pt-4 flex justify-between">
+                <span className="text-gray-600 font-medium">Total:</span>
+                <span className="font-semibold">${ticketDetails.totalPrice.toFixed(2)}</span>
               </div>
-              <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
-                <span className="font-semibold text-slate-900">Total</span>
-                <span className="font-bold text-lg text-indigo-600">€{ticketDetails.totalPrice.toFixed(2)}</span>
+              <div className="border-t pt-4 flex justify-between text-lg font-bold">
+                <span>Grand Total:</span>
+                <span className="text-blue-600">${ticketDetails.totalPrice.toFixed(2)}</span>
               </div>
             </div>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-3">
-              <p className="text-red-700 text-sm">{error}</p>
+            <div className="mb-6 p-4 bg-red-50 border border-red-300 rounded-lg">
+              <p className="text-red-800 text-sm font-medium">{error}</p>
             </div>
           )}
 
           {/* Guest Checkout Form */}
-          <div className="mb-6 p-5 bg-slate-50 border border-slate-200 rounded-lg">
-            <h2 className="text-sm font-semibold text-slate-900 mb-1">
-              Your Details
+          <div className="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Guest Checkout
             </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              No account needed — just provide your details to complete the purchase.
+            <p className="text-sm text-gray-600 mb-4">
+              No account needed! Just provide your details below to complete your purchase.
             </p>
             
             {/* Name Field */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Full Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -349,8 +290,8 @@ export default function BuyPage() {
                 onChange={handleInputChange('name')}
                 onBlur={handleBlur('name')}
                 placeholder="John Doe"
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${
-                  touched.name && formErrors.name ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.name && formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'
                 }`}
                 required
               />
@@ -361,7 +302,7 @@ export default function BuyPage() {
             
             {/* Email Field */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Email Address <span className="text-red-500">*</span>
               </label>
               <input
@@ -369,39 +310,39 @@ export default function BuyPage() {
                 value={guestInfo.email}
                 onChange={handleInputChange('email')}
                 onBlur={handleBlur('email')}
-                placeholder="you@example.com"
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${
-                  touched.email && formErrors.email ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                placeholder="your@email.com"
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.email && formErrors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'
                 }`}
                 required
               />
               {touched.email && formErrors.email && (
                 <p className="text-red-600 text-xs mt-1">{formErrors.email}</p>
               )}
-              <p className="text-xs text-slate-400 mt-1">
-                We&apos;ll send your ticket confirmation here.
+              <p className="text-xs text-gray-500 mt-1">
+                We&apos;ll send your ticket confirmation to this email.
               </p>
             </div>
             
             {/* Phone Field (Optional) */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Phone Number <span className="text-slate-400 font-normal">(optional)</span>
+            <div className="mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Phone Number <span className="text-gray-400">(optional)</span>
               </label>
               <input
                 type="tel"
                 value={guestInfo.phone}
                 onChange={handleInputChange('phone')}
                 onBlur={handleBlur('phone')}
-                placeholder="+353 1 234 5678"
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${
-                  touched.phone && formErrors.phone ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                placeholder="+1 (555) 123-4567"
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  touched.phone && formErrors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'
                 }`}
               />
               {touched.phone && formErrors.phone && (
                 <p className="text-red-600 text-xs mt-1">{formErrors.phone}</p>
               )}
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 For event updates and check-in assistance.
               </p>
             </div>
@@ -409,23 +350,12 @@ export default function BuyPage() {
 
           {/* Pay at Check-in Notice */}
           {cartData?.paymentOption === 'pay-on-day' && (
-            <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 p-4">
-              <p className="text-sm text-amber-800 font-medium">
-                Pay at Check-in Selected
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800 font-medium">
+                💳 Pay at Check-in Selected
               </p>
-              <p className="text-xs text-amber-700 mt-1">
+              <p className="text-xs text-yellow-700 mt-1">
                 You&apos;ll receive a confirmation email with your ticket. Payment will be collected when you arrive at the event.
-              </p>
-            </div>
-          )}
-
-          {isOrganizerUser && (
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg">
-              <p className="text-sm text-amber-900 font-semibold">
-                Organizer accounts cannot purchase tickets.
-              </p>
-              <p className="text-xs text-amber-800 mt-1">
-                Organizers can only create and manage events. Please use an attendee account for ticket purchases.
               </p>
             </div>
           )}
@@ -433,14 +363,14 @@ export default function BuyPage() {
           {/* Checkout Button */}
           <button
             onClick={handleCheckout}
-            disabled={isLoading || isOrganizerUser}
-            className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg mb-4 transition-colors"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg mb-4 transition"
           >
-            {isLoading ? 'Processing...' : cartData?.paymentOption === 'pay-on-day' ? 'Complete Registration (Pay at Check-in)' : `Confirm & Pay €${ticketDetails.totalPrice.toFixed(2)}`}
+            {isLoading ? 'Processing...' : cartData?.paymentOption === 'pay-on-day' ? 'Complete Registration (Pay at Check-in)' : `Confirm & Pay $${ticketDetails.totalPrice.toFixed(2)}`}
           </button>
 
           {/* Back Link */}
-          <Link href="/" className="block text-center text-indigo-500 hover:text-indigo-600 text-sm transition-colors">
+          <Link href="/" className="block text-center text-blue-600 hover:underline text-sm">
             Go back home
           </Link>
         </div>

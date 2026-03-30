@@ -25,6 +25,13 @@ export async function POST(req: NextRequest) {
       total_amount,
       payment_status,
       created_at,
+      events (
+        id,
+        title,
+        description,
+        date,
+        venue
+      ),
       tickets (
         id,
         ticket_code,
@@ -34,6 +41,7 @@ export async function POST(req: NextRequest) {
       )
     `);
 
+    // Filter by email or order ID
     if (orderId) {
       query = query.eq('id', orderId);
     } else if (email) {
@@ -63,28 +71,8 @@ export async function POST(req: NextRequest) {
 
     // Return first matching order with all its tickets
     const order = data[0];
+    const event = (order as Record<string, unknown>).events;
     const tickets = ((order as Record<string, unknown>).tickets as Array<unknown>) || [];
-
-    let event: Record<string, unknown> | null = null;
-    if (order.event_id) {
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('*')
-        .eq('id', order.event_id)
-        .single();
-
-      if (eventError) {
-        console.warn('Failed to fetch event details for tickets endpoint:', eventError);
-      } else if (eventData) {
-        event = {
-          id: eventData.id,
-          title: eventData.title,
-          description: eventData.description,
-          date: eventData.date || eventData.start_date || null,
-          venue: eventData.venue || eventData.location || null,
-        };
-      }
-    }
 
     return NextResponse.json({
       orderId: order.id,
@@ -106,9 +94,8 @@ export async function GET(req: NextRequest) {
   // Support GET requests for accessibility
   const email = req.nextUrl.searchParams.get('email');
   const orderId = req.nextUrl.searchParams.get('orderId');
-  const checkInCode = req.nextUrl.searchParams.get('checkInCode');
 
-  const body = JSON.stringify({ email, orderId, checkInCode });
+  const body = JSON.stringify({ email, orderId });
 
   return POST(
     new NextRequest(req.nextUrl, {

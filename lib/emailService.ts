@@ -1,26 +1,13 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { Ticket } from './ticketService';
 
-const smtpHost = process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST || '';
-const smtpPort = Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT || 587);
-const smtpUser = process.env.BREVO_SMTP_USER || process.env.SMTP_USER || '';
-const smtpPass = process.env.BREVO_SMTP_PASS || process.env.SMTP_PASS || '';
-const fromEmail =
-  process.env.BREVO_FROM_EMAIL ||
-  process.env.RESEND_FROM_EMAIL ||
-  process.env.SMTP_FROM_EMAIL ||
-  'noreply@eventtickets.com';
-const replyToEmail = process.env.SUPPORT_EMAIL || 'support@eventtickets.com';
-
-const transporter = nodemailer.createTransport({
-  host: smtpHost,
-  port: smtpPort,
-  secure: smtpPort === 465,
-  auth: {
-    user: smtpUser,
-    pass: smtpPass,
-  },
-});
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 export interface TicketEmailData {
   customer_email: string;
@@ -206,19 +193,21 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
           
           <div class="tickets-section">
             <h2 style="color: #667eea; margin-bottom: 20px;">Your Tickets (${data.tickets.length})</h2>
+            ${data.tickets.map((ticket, index) => `
               <div class="ticket-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                  <h3 style="margin: 0; color: #333;">${data.tickets.length}x ${data.tickets[0]?.ticket_type || 'General Entry'} ticket${data.tickets.length > 1 ? 's' : ''} to ${data.event_title}</h3>
+                  <h3 style="margin: 0; color: #333;">Ticket ${index + 1}</h3>
+                  <span style="background-color: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px;">${ticket.ticket_type}</span>
                 </div>
                 <div class="ticket-code">
-                  ${data.tickets[0]?.ticket_code || ''}
+                  ${ticket.ticket_code}
                 </div>
                 <div class="qr-code">
-                  <p style="margin: 10px 0; font-size: 12px; color: #6b7280; font-weight: 500;">Show this QR code at check-in</p>
-                  <img src="${ticketImageUrls[0] || data.tickets[0]?.qr_code_data || 'cid:qr_code_0'}" alt="QR Code for your tickets">
-                  <p style="margin: 8px 0 0 0; font-size: 11px; color: #9ca3af; text-align: center;">A staff member will scan this to check in all ${data.tickets.length} ticket${data.tickets.length > 1 ? 's' : ''}</p>
+                  <p style="margin: 10px 0; font-size: 12px; color: #6b7280;">Scan at entry</p>
+                  <img src="${ticketImageUrls[index] || ticket.qr_code_data || 'cid:qr_code_' + index}" alt="QR Code for Ticket ${index + 1}">
                 </div>
               </div>
+            `).join('')}
           </div>
           
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -244,37 +233,44 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
 }
 
 /**
- * Sends ticket confirmation email using SMTP (Brevo-compatible)
+ * Sends ticket confirmation email using Resend
  */
 export async function sendTicketConfirmationEmail(
   data: TicketEmailData
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      throw new Error('SMTP credentials are not configured');
+    if (!process.env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY is not configured');
     }
 
-    // Send a single QR code as an inline CID attachment (all tickets share the same QR).
-    const primaryTicket = data.tickets[0];
-    const qrAttachments = primaryTicket ? [{
-      filename: 'ticket-qr.png',
-      content: dataUrlToBuffer(primaryTicket.qr_code_data),
-      cid: 'qr_code_0',
-    }] : [];
-    const ticketImageUrls = ['cid:qr_code_0'];
+    // Send QR codes as inline CID attachments so major email clients render them reliably.
+    const qrAttachments = data.tickets.map((ticket, index) => ({
+      filename: `ticket-${index + 1}.png`,
+      content: dataUrlToBuffer(ticket.qr_code_data),
+      contentId: `qr_code_${index}`,
+    }));
+    const ticketImageUrls = data.tickets.map((_, index) => `cid:qr_code_${index}`);
 
-    const result = await transporter.sendMail({
-      from: fromEmail,
+    const result = await getResend().emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
       to: data.customer_email,
       subject: `Your Tickets for ${data.event_title} - Order ${data.order_id}`,
       html: generateEmailHTML(data, ticketImageUrls),
       attachments: qrAttachments,
-      replyTo: replyToEmail,
+      replyTo: 'support@eventtickets.com',
     });
+
+    if (result.error) {
+      console.error('Resend error:', result.error);
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email',
+      };
+    }
 
     return {
       success: true,
-      messageId: result.messageId,
+      messageId: result.data?.id,
     };
   } catch (error) {
     console.error('Failed to send ticket confirmation email:', error);
@@ -296,10 +292,6 @@ export async function sendPaymentReminderEmail(
   orderId: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      throw new Error('SMTP credentials are not configured');
-    }
-
     const html = `
       <!DOCTYPE html>
       <html>
@@ -342,180 +334,27 @@ export async function sendPaymentReminderEmail(
       </html>
     `;
 
-    const result = await transporter.sendMail({
-      from: fromEmail,
+    const result = await getResend().emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
       to: email,
       subject: `Payment Reminder: ${eventTitle} - Order ${orderId}`,
       html,
-      replyTo: replyToEmail,
+      replyTo: 'support@eventtickets.com',
     });
+
+    if (result.error) {
+      return {
+        success: false,
+        error: result.error.message || 'Failed to send email',
+      };
+    }
 
     return {
       success: true,
-      messageId: result.messageId,
+      messageId: result.data?.id,
     };
   } catch (error) {
     console.error('Failed to send payment reminder email:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-    };
-  }
-}
-
-export async function sendStaffInviteEmail(params: {
-  email: string;
-  eventTitle: string;
-  inviteCode: string;
-  inviterName?: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  try {
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      throw new Error('SMTP credentials are not configured');
-    }
-
-    const inviter = params.inviterName ? `${params.inviterName} ` : 'An event organizer ';
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <body style="font-family: Arial, sans-serif; color: #1f2937;">
-        <div style="max-width: 640px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-          <div style="background: #0f172a; color: #f8fafc; padding: 20px;">
-            <h2 style="margin: 0;">You were invited as event staff</h2>
-          </div>
-          <div style="padding: 20px; background: #ffffff;">
-            <p style="margin-top: 0;">${inviter}invited you to work staff check-in for:</p>
-            <p style="font-size: 18px; font-weight: 700; margin: 10px 0 20px 0;">${params.eventTitle}</p>
-            <p>Use this activation code in your account page:</p>
-            <div style="font-size: 28px; letter-spacing: 4px; font-weight: 800; color: #0f172a; margin: 10px 0 16px 0;">${params.inviteCode}</div>
-            <p style="margin-bottom: 0; color: #475569;">After activation, your account can access scanner features for this event only.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const result = await transporter.sendMail({
-      from: fromEmail,
-      to: params.email,
-      subject: `Staff invite for ${params.eventTitle}`,
-      html,
-      replyTo: replyToEmail,
-    });
-
-    return { success: true, messageId: result.messageId };
-  } catch (error) {
-    console.error('Failed to send staff invite email:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-    };
-  }
-}
-
-/**
- * Sends notification email when an event's date or venue changes
- */
-export async function sendEventChangeEmail(params: {
-  email: string;
-  eventTitle: string;
-  eventDate: string;
-  eventVenue: string;
-  changes: { dateChanged?: boolean; venueChanged?: boolean };
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  try {
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      throw new Error('SMTP credentials are not configured');
-    }
-
-    const changeParts: string[] = [];
-    if (params.changes.dateChanged) changeParts.push('date/time');
-    if (params.changes.venueChanged) changeParts.push('venue');
-    const changeLabel = changeParts.join(' and ');
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <body style="font-family: Arial, sans-serif; color: #1f2937;">
-        <div style="max-width: 640px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-          <div style="background: #f59e0b; color: #ffffff; padding: 20px;">
-            <h2 style="margin: 0;">Event Update</h2>
-          </div>
-          <div style="padding: 20px; background: #ffffff;">
-            <p style="margin-top: 0;">The <strong>${changeLabel}</strong> for <strong>${params.eventTitle}</strong> has been updated.</p>
-            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 16px 0;">
-              ${params.changes.dateChanged ? `<p style="margin: 4px 0;"><strong>New Date:</strong> ${formatEventDate(params.eventDate, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>` : ''}
-              ${params.changes.venueChanged ? `<p style="margin: 4px 0;"><strong>New Venue:</strong> ${params.eventVenue}</p>` : ''}
-            </div>
-            <p>Please check the event page for the latest details. Your ticket is still valid.</p>
-            <p style="color: #6b7280; font-size: 14px; margin-bottom: 0;">If you have any questions, please contact the event organizer.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const result = await transporter.sendMail({
-      from: fromEmail,
-      to: params.email,
-      subject: `Event Update: ${params.eventTitle}`,
-      html,
-      replyTo: replyToEmail,
-    });
-
-    return { success: true, messageId: result.messageId };
-  } catch (error) {
-    console.error('Failed to send event change email:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-    };
-  }
-}
-
-/**
- * Sends email when a user is invited to co-manage an event
- */
-export async function sendCoOrganizerInviteEmail(params: {
-  email: string;
-  eventTitle: string;
-  inviterName: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  try {
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      throw new Error('SMTP credentials are not configured');
-    }
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <body style="font-family: Arial, sans-serif; color: #1f2937;">
-        <div style="max-width: 640px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
-          <div style="background: #0f172a; color: #f8fafc; padding: 20px;">
-            <h2 style="margin: 0;">You&rsquo;re invited to co-manage an event</h2>
-          </div>
-          <div style="padding: 20px; background: #ffffff;">
-            <p style="margin-top: 0;"><strong>${params.inviterName}</strong> has invited you to co-manage:</p>
-            <p style="font-size: 18px; font-weight: 700; margin: 10px 0 20px 0;">${params.eventTitle}</p>
-            <p>Log in to your account and visit your notifications to accept or decline this invitation.</p>
-            <p style="margin-bottom: 0; color: #475569;">As a co-organizer you will be able to edit event details, manage tickets, and invite staff.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const result = await transporter.sendMail({
-      from: fromEmail,
-      to: params.email,
-      subject: `Co-organizer invite for ${params.eventTitle}`,
-      html,
-      replyTo: replyToEmail,
-    });
-
-    return { success: true, messageId: result.messageId };
-  } catch (error) {
-    console.error('Failed to send co-organizer invite email:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
