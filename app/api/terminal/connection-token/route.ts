@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { getAuthenticatedUserForRoute } from '@/lib/staffAccess';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
 export async function POST() {
   try {
+    const user = await getAuthenticatedUserForRoute();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!stripe) {
       return NextResponse.json(
         { error: 'STRIPE_SECRET_KEY is not configured' },

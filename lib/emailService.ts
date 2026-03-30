@@ -206,22 +206,19 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
           
           <div class="tickets-section">
             <h2 style="color: #667eea; margin-bottom: 20px;">Your Tickets (${data.tickets.length})</h2>
-            ${data.tickets.map((ticket, index) => `
               <div class="ticket-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                  <h3 style="margin: 0; color: #333;">Ticket ${index + 1}</h3>
-                  <span style="background-color: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px;">${ticket.ticket_type}</span>
+                  <h3 style="margin: 0; color: #333;">${data.tickets.length}x ${data.tickets[0]?.ticket_type || 'General Entry'} ticket${data.tickets.length > 1 ? 's' : ''} to ${data.event_title}</h3>
                 </div>
                 <div class="ticket-code">
-                  ${ticket.ticket_code}
+                  ${data.tickets[0]?.ticket_code || ''}
                 </div>
                 <div class="qr-code">
                   <p style="margin: 10px 0; font-size: 12px; color: #6b7280; font-weight: 500;">Show this QR code at check-in</p>
-                  <img src="${ticketImageUrls[index] || ticket.qr_code_data || 'cid:qr_code_' + index}" alt="QR Code for Ticket ${index + 1}">
-                  <p style="margin: 8px 0 0 0; font-size: 11px; color: #9ca3af; text-align: center;">A staff member will scan this to check you in</p>
+                  <img src="${ticketImageUrls[0] || data.tickets[0]?.qr_code_data || 'cid:qr_code_0'}" alt="QR Code for your tickets">
+                  <p style="margin: 8px 0 0 0; font-size: 11px; color: #9ca3af; text-align: center;">A staff member will scan this to check in all ${data.tickets.length} ticket${data.tickets.length > 1 ? 's' : ''}</p>
                 </div>
               </div>
-            `).join('')}
           </div>
           
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -257,13 +254,14 @@ export async function sendTicketConfirmationEmail(
       throw new Error('SMTP credentials are not configured');
     }
 
-    // Send QR codes as inline CID attachments so major email clients render them reliably.
-    const qrAttachments = data.tickets.map((ticket, index) => ({
-      filename: `ticket-${index + 1}.png`,
-      content: dataUrlToBuffer(ticket.qr_code_data),
-      cid: `qr_code_${index}`,
-    }));
-    const ticketImageUrls = data.tickets.map((_, index) => `cid:qr_code_${index}`);
+    // Send a single QR code as an inline CID attachment (all tickets share the same QR).
+    const primaryTicket = data.tickets[0];
+    const qrAttachments = primaryTicket ? [{
+      filename: 'ticket-qr.png',
+      content: dataUrlToBuffer(primaryTicket.qr_code_data),
+      cid: 'qr_code_0',
+    }] : [];
+    const ticketImageUrls = ['cid:qr_code_0'];
 
     const result = await transporter.sendMail({
       from: fromEmail,

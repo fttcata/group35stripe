@@ -58,6 +58,7 @@ function StaffScanPage() {
   const [scanning, setScanning] = useState(false);
   const [scannedData, setScannedData] = useState<ScannedTicket | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [staffAccessLoading, setStaffAccessLoading] = useState(true);
   const [hasStaffAccess, setHasStaffAccess] = useState(false);
@@ -429,36 +430,18 @@ function StaffScanPage() {
     }
   }, [scannedData]);
 
-  // Main scanning loop
-  useEffect(() => {
-    if (!scanning || !videoRef.current) return;
-
-    const scanInterval = setInterval(async () => {
-      if (scanInFlightRef.current) return;
-      if (!canvasRef.current || !videoRef.current) return;
-      const text = await decodeQRFromCanvas();
-      if (text) {
-        scanInFlightRef.current = true;
-        setScanning(false);
-        await handleQRScanned(text);
-        scanInFlightRef.current = false;
-      }
-    }, 300);
-
-    return () => clearInterval(scanInterval);
-  }, [scanning]);
-
   // Handle scanned QR data
-  const handleQRScanned = async (qrData: string) => {
+  const handleQRScanned = useCallback(async (qrData: string) => {
     setLoading(true);
     setError(null);
+    setSuccessMessage(null);
     try {
-      // QR contains format: TICKET-YYYYMMDD-XXXXXX|Event Title|timestamp
+      // QR contains format: 123456|Event Title|timestamp
       const parts = qrData.split('|');
-      const ticketCode = parts[0];
+      const ticketCode = parts[0]?.trim();
       const eventTitleHint = parts[1]?.trim() || undefined;
 
-      if (!ticketCode || !ticketCode.startsWith('TICKET-')) {
+      if (!ticketCode) {
         throw new Error('Invalid QR code format');
       }
 
@@ -489,7 +472,26 @@ function StaffScanPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedEventId, cameraActive, terminal, connectedReader]);
+
+  // Main scanning loop
+  useEffect(() => {
+    if (!scanning || !videoRef.current) return;
+
+    const scanInterval = setInterval(async () => {
+      if (scanInFlightRef.current) return;
+      if (!canvasRef.current || !videoRef.current) return;
+      const text = await decodeQRFromCanvas();
+      if (text) {
+        scanInFlightRef.current = true;
+        setScanning(false);
+        await handleQRScanned(text);
+        scanInFlightRef.current = false;
+      }
+    }, 300);
+
+    return () => clearInterval(scanInterval);
+  }, [scanning, handleQRScanned]);
 
   // Handle check-in
   const handleCheckIn = async () => {
@@ -505,10 +507,17 @@ function StaffScanPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Check-in failed');
 
+      const name = scannedData.customerName || 'Customer';
+      setSuccessMessage(`${name} checked in successfully`);
       setScannedData(null);
       await clearReaderDisplay();
-      setScanning(true);
-      if (!cameraActive) startCamera();
+
+      // Auto-resume scanning after a brief delay so staff see the confirmation
+      setTimeout(() => {
+        setSuccessMessage(null);
+        setScanning(true);
+        if (!cameraActive) startCamera();
+      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Check-in failed');
     } finally {
@@ -520,6 +529,7 @@ function StaffScanPage() {
   const resetScan = () => {
     setScannedData(null);
     setError(null);
+    setSuccessMessage(null);
     clearReaderDisplay().catch(() => undefined);
     setScanning(true);
     if (!cameraActive) startCamera();
@@ -567,12 +577,16 @@ function StaffScanPage() {
         throw new Error(completeData.error || 'Payment succeeded but check-in completion failed');
       }
 
+      const name = scannedData.customerName || 'Customer';
+      setSuccessMessage(`${name} — payment collected and checked in`);
       setScannedData(null);
       await clearReaderDisplay();
-      setScanning(true);
-      if (!cameraActive) {
-        await startCamera();
-      }
+
+      setTimeout(() => {
+        setSuccessMessage(null);
+        setScanning(true);
+        if (!cameraActive) startCamera();
+      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment collection failed');
     } finally {
@@ -782,6 +796,13 @@ function StaffScanPage() {
             </div>
           )}
 
+          {successMessage && (
+            <div className="mt-4 bg-emerald-50 border-2 border-emerald-300 text-emerald-800 px-4 py-3 rounded-lg font-semibold text-lg text-center">
+              {successMessage}
+            </div>
+          )}
+
+
           <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
             <p className="text-sm text-slate-700 mb-2">Manual code entry</p>
             <div className="flex gap-2">
@@ -790,7 +811,7 @@ function StaffScanPage() {
                 value={manualTicketCode}
                 onChange={(e) => setManualTicketCode(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitManualCode()}
-                placeholder="TICKET-YYYYMMDD-XXXXXX"
+                placeholder="6-digit ticket code"
                 className="flex-1 px-3 py-2 rounded border border-slate-300 text-slate-900"
               />
               <button

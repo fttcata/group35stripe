@@ -151,7 +151,7 @@ Response:
   },
   "tickets": [
     {
-      "ticket_code": "TICKET-20260211-ABCD12",
+      "ticket_code": "482937",
       "ticket_type": "Standard",
       "qr_code_data": "data:image/png;base64,..."
     }

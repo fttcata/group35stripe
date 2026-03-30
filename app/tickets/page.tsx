@@ -133,41 +133,36 @@ export default function MyTicketsPage() {
               )}
 
               <h3 className="text-2xl font-bold mb-6">
-                Your Tickets ({tickets.length})
+                Your Order ({tickets.length} ticket{tickets.length !== 1 ? 's' : ''})
               </h3>
 
-              <div className="space-y-4">
-                {tickets.map((ticket, index) => (
-                  <div
-                    key={index}
-                    className="border border-slate-200 rounded-lg p-6 bg-slate-50"
-                  >
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-bold text-lg">Ticket {index + 1}</h4>
-                      <span className="bg-indigo-500 text-white px-3 py-1 rounded-lg text-sm">
-                        {ticket.ticket_type}
-                      </span>
-                    </div>
+              <div className="border border-slate-200 rounded-lg p-6 bg-slate-50">
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="font-bold text-lg">
+                    {tickets.length}x {tickets[0].ticket_type}
+                  </h4>
+                  <span className="bg-indigo-500 text-white px-3 py-1 rounded-lg text-sm">
+                    {tickets[0].ticket_type}
+                  </span>
+                </div>
 
-                    <div className="mb-4 p-3 bg-white rounded border border-slate-200">
-                      <p className="text-xs text-slate-500 mb-1">Ticket Code</p>
-                      <p className="font-mono text-base font-bold text-indigo-600">
-                        {ticket.ticket_code}
-                      </p>
-                    </div>
+                <div className="mb-4 p-3 bg-white rounded border border-slate-200">
+                  <p className="text-xs text-slate-500 mb-1">Ticket Code</p>
+                  <p className="font-mono text-base font-bold text-indigo-600">
+                    {tickets[0].ticket_code}
+                  </p>
+                </div>
 
-                    <div className="text-center py-4">
-                      <img
-                        src={ticket.qr_code_data}
-                        alt={`QR Code for Ticket ${index + 1}`}
-                        className="w-48 h-48 mx-auto border border-slate-200 rounded"
-                      />
-                      <p className="text-xs text-slate-400 mt-2">
-                        Scan at event entry
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                <div className="text-center py-4">
+                  <img
+                    src={tickets[0].qr_code_data}
+                    alt="QR Code for your order"
+                    className="w-48 h-48 mx-auto border border-slate-200 rounded"
+                  />
+                  <p className="text-xs text-slate-400 mt-2">
+                    Scan at event entry
+                  </p>
+                </div>
               </div>
 
               <div className="mt-8 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
