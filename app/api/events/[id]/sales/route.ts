@@ -186,6 +186,7 @@ export async function GET(
     }
 
     const revenueByType = Array.from(revenueByTypeMap.values()).sort((a, b) => b.revenue - a.revenue);
+    const ticketsSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
     const orderCreatedAtMap = new Map<string, string>();
     for (const order of completedOrders) {
@@ -213,6 +214,7 @@ export async function GET(
       salesTimeline,
       payMethodBreakdown,
       recentTransactions,
+      ticketsSold,
     });
   } catch (error) {
     return NextResponse.json(

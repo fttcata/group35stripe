@@ -48,6 +48,7 @@ export default function SubmitEventPage() {
   const [publishSuccess, setPublishSuccess] = useState(false)
   const [dateWarning, setDateWarning] = useState('')
   const [venueWarning, setVenueWarning] = useState('')
+  const [saveNotice, setSaveNotice] = useState('')
   const [roleChecked, setRoleChecked] = useState(false)
   const [isOrganizer, setIsOrganizer] = useState(false)
   const isEditing = !!eventId
@@ -120,14 +121,14 @@ export default function SubmitEventPage() {
       
       const { data: ticketsWithQty, error: errorWithQty } = await supabase
         .from('ticket_types')
-        .select('id,name,price,quantity')
+        .select('id,name,price,quantity_available,quantity')
         .eq('event_id', eventId)
 
       if (errorWithQty) {
-        // If quantity field doesn't exist, try without it
+        // If quantity_available doesn't exist, try legacy quantity
         const { data: ticketsNoQty, error: errorNoQty } = await supabase
           .from('ticket_types')
-          .select('id,name,price')
+          .select('id,name,price,quantity')
           .eq('event_id', eventId)
         
         if (errorNoQty) {
@@ -136,10 +137,13 @@ export default function SubmitEventPage() {
           ticketError = errorNoQty
         } else {
           // Convert to include quantity field with default value
-          tickets = (ticketsNoQty || []).map(t => ({ ...t, quantity: 0 }))
+          tickets = (ticketsNoQty || []).map(t => ({ ...t, quantity: t.quantity || 0 }))
         }
       } else {
-        tickets = ticketsWithQty
+        tickets = (ticketsWithQty || []).map(t => ({
+          ...t,
+          quantity: t.quantity_available ?? t.quantity ?? 0,
+        }))
       }
 
       // Fetch sold ticket counts for each ticket type
@@ -290,6 +294,7 @@ export default function SubmitEventPage() {
       e.preventDefault()
     }
     setError('')
+    setSaveNotice('')
     setIsSubmitting(true)
 
     try {
@@ -383,6 +388,7 @@ export default function SubmitEventPage() {
           name: ticket.name,
           price: ticket.price,
           quantity: ticket.quantity,
+          quantity_available: ticket.quantity,
         }))
 
         const { error: ticketInsertError } = await supabase
@@ -421,7 +427,7 @@ export default function SubmitEventPage() {
         if (publish) {
           setPublishSuccess(true)
         } else {
-          router.push('/my-events')
+          setSaveNotice('Changes saved. You can publish when you are ready.')
         }
       } else {
         // CREATE new event
@@ -457,6 +463,7 @@ export default function SubmitEventPage() {
           name: ticket.name,
           price: ticket.price,
           quantity: ticket.quantity,
+          quantity_available: ticket.quantity,
         }))
 
         const { error: ticketInsertError } = await supabase
@@ -589,6 +596,12 @@ export default function SubmitEventPage() {
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-200 p-4">
                 <p className="text-red-800">{error}</p>
+              </div>
+            )}
+
+            {saveNotice && (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
+                <p className="text-emerald-800">{saveNotice}</p>
               </div>
             )}
 

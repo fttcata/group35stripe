@@ -72,12 +72,12 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
       }
 
       const eventIds = (dbEvents || []).map((e) => e.id)
-      let ticketRows: Array<{ event_id: string; id: string; name: string; price: number; quantity?: number }> = []
+      let ticketRows: Array<{ event_id: string; id: string; name: string; price: number; quantity_available?: number; quantity?: number }> = []
 
       if (eventIds.length > 0) {
         const { data: tickets, error: ticketError } = await supabase
           .from('ticket_types')
-          .select('event_id,id,name,price,quantity')
+          .select('event_id,id,name,price,quantity_available,quantity')
           .in('event_id', eventIds)
 
         if (!ticketError && tickets) {
@@ -87,7 +87,7 @@ export default function EventDetailsPage({ params: paramsPromise }: Props) {
 
       const ticketsByEventId = ticketRows.reduce<Record<string, { id: string; name: string; price: number; quantity?: number }[]>>((acc, row) => {
         if (!acc[row.event_id]) acc[row.event_id] = []
-        acc[row.event_id].push({ id: row.id, name: row.name, price: row.price, quantity: row.quantity })
+        acc[row.event_id].push({ id: row.id, name: row.name, price: row.price, quantity: row.quantity_available ?? row.quantity })
         return acc
       }, {})
 

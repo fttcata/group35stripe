@@ -105,12 +105,14 @@ function EventDetailsContent() {
 
 			const { data: ticketRows } = await supabase
 				.from('ticket_types')
-				.select('id,name,price,quantity')
+				.select('id,name,price,quantity_available,quantity')
 				.eq('event_id', eventId)
 
 			const tickets: TicketType[] = (ticketRows || []).map((row) => ({
+				id: row.id,
 				name: row.name,
 				price: row.price,
+				quantity: row.quantity_available ?? row.quantity ?? 0,
 			}))
 
 			// Fetch sold count for each ticket type
@@ -124,7 +126,7 @@ function EventDetailsContent() {
 						.eq('ticket_type_id', row.id)
 					
 					const sold = soldTickets?.length || 0
-					const total = row.quantity || 0
+					const total = row.quantity_available ?? row.quantity ?? 0
 					availability[i] = {
 						total,
 						sold,
@@ -133,9 +135,9 @@ function EventDetailsContent() {
 				} catch (err) {
 					// Tickets table might not exist, assume all are available
 					availability[i] = {
-						total: row.quantity || 0,
+						total: row.quantity_available ?? row.quantity ?? 0,
 						sold: 0,
-						available: row.quantity || 0
+						available: row.quantity_available ?? row.quantity ?? 0
 					}
 				}
 			}
@@ -227,6 +229,7 @@ function EventDetailsContent() {
       paymentOption,
       totalPrice: totals.totalPrice,
       totalTickets: totals.totalTickets,
+			ticketTypes: event.ticketTypes || [],
     }))
     
     // Redirect to checkout

@@ -119,14 +119,14 @@ export default function MyEventsPage() {
             // Try to fetch tickets with quantity field
             const { data: tickets, error: ticketError } = await supabase
               .from('ticket_types')
-              .select('name,price,quantity,id')
+              .select('name,price,quantity_available,quantity,id')
               .eq('event_id', event.id)
 
             if (ticketError) {
-              // If quantity column doesn't exist, try without it
+              // If quantity_available doesn't exist, try legacy quantity column
               const { data: ticketsAlt, error: altError } = await supabase
                 .from('ticket_types')
-                .select('name,price,id')
+                .select('name,price,quantity,id')
                 .eq('event_id', event.id)
               
               if (altError) {
@@ -138,7 +138,7 @@ export default function MyEventsPage() {
               const ticketsWithDefault: TicketInfo[] = (ticketsAlt || []).map(t => ({
                 name: t.name,
                 price: t.price,
-                quantity: 0, // Default if column doesn't exist
+                quantity: t.quantity || 0,
                 sold: 0,
               }))
 
@@ -152,7 +152,10 @@ export default function MyEventsPage() {
 
             // Count sold tickets per event using completed orders
             let totalSold = 0
-            const totalTickets = (tickets || []).reduce((sum, t) => sum + (t.quantity || 0), 0)
+            const totalTickets = (tickets || []).reduce((sum, t) => {
+              const qty = t.quantity ?? t.quantity_available ?? 0
+              return sum + Number(qty)
+            }, 0)
 
             try {
               // Fetch all completed orders for this event
@@ -189,6 +192,30 @@ export default function MyEventsPage() {
                   }
                 }
               }
+              // Fallback: count tickets via orders join if totals still zero
+              if (totalSold === 0) {
+                const { data: ticketRows } = await supabase
+                  .from('tickets')
+                  .select('id, orders!inner(event_id)')
+                  .eq('orders.event_id', event.id)
+
+                if (ticketRows && ticketRows.length > 0) {
+                  totalSold = ticketRows.length
+                }
+              }
+
+              // Final fallback: use server-side sales endpoint (handles RLS)
+              if (totalSold === 0) {
+                try {
+                  const res = await fetch(`/api/events/${event.id}/sales`)
+                  const data = await res.json()
+                  if (res.ok && typeof data?.ticketsSold === 'number') {
+                    totalSold = data.ticketsSold
+                  }
+                } catch {
+                  // ignore
+                }
+              }
             } catch (err) {
               // If error fetching sold counts, continue with totalSold = 0
               console.debug(`Error counting sold tickets for event ${event.id}:`, err)
@@ -198,7 +225,7 @@ export default function MyEventsPage() {
             const ticketsWithSold: TicketInfo[] = (tickets || []).map(t => ({
               name: t.name,
               price: t.price,
-              quantity: t.quantity || 0,
+              quantity: Number(t.quantity ?? t.quantity_available ?? 0),
               sold: 0, // Per-ticket-type sold count not tracked; use totalSold for event-level
             }))
 
@@ -419,17 +446,20 @@ export default function MyEventsPage() {
                         {event.tickets && event.tickets.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-slate-200">
                             <div className="flex flex-wrap gap-6 text-sm">
-                              {(event.totalTickets || 0) > 0 && (
-                                <div>
-                                  <span className="text-slate-500">Tickets Sold: </span>
-                                  <span className="font-semibold text-slate-900">
-                                    {event.totalSold || 0}/{event.totalTickets}
-                                  </span>
-                                  {event.totalTickets && event.totalSold === event.totalTickets && event.totalTickets > 0 && (
-                                    <span className="ml-2 text-red-600 font-semibold">🔴 SOLD OUT</span>
-                                  )}
-                                </div>
-                              )}
+                              <div>
+                                <span className="text-slate-500">Tickets Sold: </span>
+                                <span className="font-semibold text-slate-900">
+                                  {Number(event.totalSold || 0)}/{
+                                    Number(
+                                      event.totalTickets ??
+                                      event.tickets.reduce((sum, t) => sum + Number(t.quantity || 0), 0)
+                                    )
+                                  }
+                                </span>
+                                {event.totalTickets && Number(event.totalSold || 0) === Number(event.totalTickets) && Number(event.totalTickets) > 0 && (
+                                  <span className="ml-2 text-red-600 font-semibold">🔴 SOLD OUT</span>
+                                )}
+                              </div>
                               
                               {/* Show sold out ticket types */}
                               {event.tickets.some(t => t.sold === t.quantity && t.quantity > 0) && (
