@@ -52,11 +52,28 @@ export async function updateAccount(id: string, formData: FormData) {
 export async function deleteEvent(id: string) {
   await checkAdmin()
 
+  const { count: orderCount, error: orderCountError } = await adminSupabase!
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', id)
+
+  if (orderCountError) {
+    console.error('Error checking event orders:', orderCountError)
+    throw new Error('Unable to verify event orders before deletion')
+  }
+
+  if ((orderCount || 0) > 0) {
+    throw new Error('Event has orders. Delete orders first or unpublish instead.')
+  }
+
   const { error } = await adminSupabase!.from('events').delete().eq('id', id)
 
   if (error) {
     console.error('Error deleting event:', error)
-    throw new Error('Failed to delete event')
+    if (error.code === '23503') {
+      throw new Error('Event cannot be deleted because related records still exist.')
+    }
+    throw new Error(error.message || 'Failed to delete event')
   }
 
   revalidatePath('/admin')

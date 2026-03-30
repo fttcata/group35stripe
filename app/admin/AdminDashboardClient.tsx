@@ -26,6 +26,7 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 export default function AdminDashboardClient({ profiles = [], events = [], orders = [] }: Props) {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null)
   
   const initialTab = (searchParams.get('tab') as 'overview' | 'events' | 'organizers' | 'attendees') || 'overview'
   const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'organizers' | 'attendees'>(initialTab)
@@ -283,21 +284,31 @@ export default function AdminDashboardClient({ profiles = [], events = [], order
                               View
                             </Link>
                           )}
-                          <Link href={`/submit-event?id=${event.id}`} className="text-amber-600 hover:text-amber-900">
+                          <Link href={`/submit-event?id=${event.id}&from=admin`} className="text-amber-600 hover:text-amber-900">
                             Edit
                           </Link>
-                          <form 
-                            action={async () => {
-                              if (confirm('Delete this event?')) {
-                                await deleteEvent(event.id);
+                          <button
+                            type="button"
+                            className="text-red-600 hover:text-red-900 font-medium disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={deletingEventId === event.id}
+                            onClick={async () => {
+                              if (!window.confirm('Delete this event?')) return
+
+                              try {
+                                setDeletingEventId(event.id)
+                                await deleteEvent(event.id)
+                                router.refresh()
+                              } catch (error) {
+                                console.error('Failed to delete event:', error)
+                                const message = error instanceof Error ? error.message : 'Failed to delete event. Please try again.'
+                                window.alert(message)
+                              } finally {
+                                setDeletingEventId(null)
                               }
-                            }} 
-                            className="inline-block m-0 p-0"
+                            }}
                           >
-                            <button type="submit" className="text-red-600 hover:text-red-900 font-medium">
-                              Drop
-                            </button>
-                          </form>
+                            {deletingEventId === event.id ? 'Dropping...' : 'Drop'}
+                          </button>
                         </td>
                       </tr>
                     ))}
