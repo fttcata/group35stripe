@@ -71,9 +71,8 @@ export default function SubmitEventPage() {
 
   // Load event data for editing
   useEffect(() => {
-    if (isEditing) {
-      loadEventForEdit()
-    }
+    if (!isEditing) return
+    loadEventForEdit()
   }, [eventId])
 
   // Detect changes in date/venue
@@ -114,6 +113,9 @@ export default function SubmitEventPage() {
         setIsLoading(false)
         return
       }
+
+      // Reset to prevent duplicate rows if load runs again
+      setTicketTypes([{ name: 'General', price: 0, quantity: 0 }])
 
       // Fetch ticket types - try with quantity field first
       let tickets: { id?: number; name: string; price: number; quantity?: number; sold?: number }[] = []
@@ -370,35 +372,108 @@ export default function SubmitEventPage() {
           return
         }
 
-        // Update ticket types
+        // Update ticket types (edit in place, add new, delete removed if no sales)
         const validTickets = ticketTypes.filter(t => t.name.trim() && t.price > 0)
-        
-        // Delete old tickets and insert new ones
-        const { error: deleteError } = await supabase
+
+        // Load existing ticket type ids for this event
+        const { data: existingRows, error: existingError } = await supabase
           .from('ticket_types')
-          .delete()
+          .select('id')
           .eq('event_id', eventId)
 
-        if (deleteError) {
-          console.error('Failed to delete old tickets:', deleteError)
-        }
-
-        const ticketRows = validTickets.map((ticket) => ({
-          event_id: eventId,
-          name: ticket.name,
-          price: ticket.price,
-          quantity: ticket.quantity,
-          quantity_available: ticket.quantity,
-        }))
-
-        const { error: ticketInsertError } = await supabase
-          .from('ticket_types')
-          .insert(ticketRows)
-
-        if (ticketInsertError) {
-          setError(`Failed to save ticket types: ${ticketInsertError.message}`)
+        if (existingError) {
+          setError(`Failed to load existing ticket types: ${existingError.message}`)
           setIsSubmitting(false)
           return
+        }
+
+        const existingIds = new Set((existingRows || []).map(r => r.id))
+        const keepIds = new Set(validTickets.filter(t => t.id).map(t => t.id as number))
+
+        // Delete removed ticket types only if no sales
+        const toDelete = Array.from(existingIds).filter(id => !keepIds.has(id as number))
+        if (toDelete.length > 0) {
+          for (const id of toDelete) {
+            const ticket = ticketTypes.find(t => t.id === id)
+            if (ticket?.sold && ticket.sold > 0) {
+              setError(`Cannot remove ticket type "${ticket.name}" because it has sales.`)
+              setIsSubmitting(false)
+              return
+            }
+
+            const { count: itemCount, error: itemError } = await supabase
+              .from('order_items')
+              .select('id', { count: 'exact', head: true })
+              .eq('ticket_type_id', id)
+
+            if (itemError) {
+              setError(`Failed to check ticket usage: ${itemError.message}`)
+              setIsSubmitting(false)
+              return
+            }
+
+            if ((itemCount || 0) > 0) {
+              setError(`Cannot remove ticket type "${ticket?.name || 'Ticket'}" because it has orders.`)
+              setIsSubmitting(false)
+              return
+            }
+          }
+
+          const { error: deleteError } = await supabase
+            .from('ticket_types')
+            .delete()
+            .in('id', toDelete as number[])
+
+          if (deleteError) {
+            setError(`Failed to delete removed ticket types: ${deleteError.message}`)
+            setIsSubmitting(false)
+            return
+          }
+        }
+
+        // Update existing and insert new
+        for (const ticket of validTickets) {
+          const sold = ticket.sold || 0
+          if (ticket.id) {
+            if (sold > 0 && ticket.quantity < sold) {
+              setError(`Quantity for "${ticket.name}" cannot be less than tickets sold (${sold}).`)
+              setIsSubmitting(false)
+              return
+            }
+
+            const available = Math.max(0, ticket.quantity - sold)
+            const { error: updateTicketError } = await supabase
+              .from('ticket_types')
+              .update({
+                name: ticket.name,
+                price: ticket.price,
+                quantity: ticket.quantity,
+                quantity_available: available,
+              })
+              .eq('id', ticket.id)
+
+            if (updateTicketError) {
+              setError(`Failed to update ticket type: ${updateTicketError.message}`)
+              setIsSubmitting(false)
+              return
+            }
+          } else {
+            const { error: insertTicketError } = await supabase
+              .from('ticket_types')
+              .insert({
+                event_id: eventId,
+                name: ticket.name,
+                price: ticket.price,
+                quantity: ticket.quantity,
+                quantity_available: ticket.quantity,
+              })
+
+            if (insertTicketError) {
+              setError(`Failed to add ticket type: ${insertTicketError.message}`)
+              setIsSubmitting(false)
+              return
+            }
+          }
         }
 
         // TODO: Send notifications if date or venue changed and event is published
