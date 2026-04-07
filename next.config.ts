@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'plsziegmnjjubamtawng.supabase.co',
+      },
+      {
+        protocol: 'https',
         hostname: '**.tcd.ie',
       },
       {

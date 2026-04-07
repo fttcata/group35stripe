@@ -5,6 +5,20 @@ import AdminDashboardClient from './AdminDashboardClient'
 
 export const dynamic = 'force-dynamic'
 
+function toErrorInfo(err: unknown) {
+  if (!err) return null
+  if (typeof err === 'object') {
+    const e = err as { message?: string; code?: string; details?: string; hint?: string }
+    return {
+      message: e.message || 'Unknown error',
+      code: e.code || null,
+      details: e.details || null,
+      hint: e.hint || null,
+    }
+  }
+  return { message: String(err), code: null, details: null, hint: null }
+}
+
 export default async function AdminDashboardPage() {
   const supabase = await createSupabaseServerClient()
 
@@ -36,7 +50,12 @@ export default async function AdminDashboardPage() {
     .order('created_at', { ascending: false })
 
   if (profilesError || eventsError || ordersError) {
-    console.error('Data Fetching Errors:', { profilesError, eventsError, ordersError })
+    const errorInfo = {
+      profilesError: toErrorInfo(profilesError),
+      eventsError: toErrorInfo(eventsError),
+      ordersError: toErrorInfo(ordersError),
+    }
+    console.error('Data Fetching Errors:', errorInfo)
     return (
       <div className='flex items-center justify-center p-8 bg-red-50 text-red-500 rounded-lg max-w-lg mx-auto mt-20'>
         <p className='font-semibold'>Error loading admin datasets. Check console.</p>
