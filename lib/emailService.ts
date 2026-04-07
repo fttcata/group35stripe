@@ -1,13 +1,26 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { Ticket } from './ticketService';
 
-let _resend: Resend | null = null;
-function getResend(): Resend {
-  if (!_resend) {
-    _resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return _resend;
-}
+const smtpHost = process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST || '';
+const smtpPort = Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT || 587);
+const smtpUser = process.env.BREVO_SMTP_USER || process.env.SMTP_USER || '';
+const smtpPass = process.env.BREVO_SMTP_PASS || process.env.SMTP_PASS || '';
+const fromEmail =
+  process.env.BREVO_FROM_EMAIL ||
+  process.env.RESEND_FROM_EMAIL ||
+  process.env.SMTP_FROM_EMAIL ||
+  'noreply@eventtickets.com';
+const replyToEmail = process.env.SUPPORT_EMAIL || 'support@eventtickets.com';
+
+const transporter = nodemailer.createTransport({
+  host: smtpHost,
+  port: smtpPort,
+  secure: smtpPort === 465,
+  auth: {
+    user: smtpUser,
+    pass: smtpPass,
+  },
+});
 
 export interface TicketEmailData {
   customer_email: string;
@@ -193,21 +206,19 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
           
           <div class="tickets-section">
             <h2 style="color: #667eea; margin-bottom: 20px;">Your Tickets (${data.tickets.length})</h2>
-            ${data.tickets.map((ticket, index) => `
               <div class="ticket-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                  <h3 style="margin: 0; color: #333;">Ticket ${index + 1}</h3>
-                  <span style="background-color: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px;">${ticket.ticket_type}</span>
+                  <h3 style="margin: 0; color: #333;">${data.tickets.length}x ${data.tickets[0]?.ticket_type || 'General Entry'} ticket${data.tickets.length > 1 ? 's' : ''} to ${data.event_title}</h3>
                 </div>
                 <div class="ticket-code">
-                  ${ticket.ticket_code}
+                  ${data.tickets[0]?.ticket_code || ''}
                 </div>
                 <div class="qr-code">
-                  <p style="margin: 10px 0; font-size: 12px; color: #6b7280;">Scan at entry</p>
-                  <img src="${ticketImageUrls[index] || ticket.qr_code_data || 'cid:qr_code_' + index}" alt="QR Code for Ticket ${index + 1}">
+                  <p style="margin: 10px 0; font-size: 12px; color: #6b7280; font-weight: 500;">Show this QR code at check-in</p>
+                  <img src="${ticketImageUrls[0] || data.tickets[0]?.qr_code_data || 'cid:qr_code_0'}" alt="QR Code for your tickets">
+                  <p style="margin: 8px 0 0 0; font-size: 11px; color: #9ca3af; text-align: center;">A staff member will scan this to check in all ${data.tickets.length} ticket${data.tickets.length > 1 ? 's' : ''}</p>
                 </div>
               </div>
-            `).join('')}
           </div>
           
           <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -233,44 +244,37 @@ function generateEmailHTML(data: TicketEmailData, ticketImageUrls: string[] = []
 }
 
 /**
- * Sends ticket confirmation email using Resend
+ * Sends ticket confirmation email using SMTP (Brevo-compatible)
  */
 export async function sendTicketConfirmationEmail(
   data: TicketEmailData
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    if (!process.env.RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY is not configured');
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
     }
 
-    // Send QR codes as inline CID attachments so major email clients render them reliably.
-    const qrAttachments = data.tickets.map((ticket, index) => ({
-      filename: `ticket-${index + 1}.png`,
-      content: dataUrlToBuffer(ticket.qr_code_data),
-      contentId: `qr_code_${index}`,
-    }));
-    const ticketImageUrls = data.tickets.map((_, index) => `cid:qr_code_${index}`);
+    // Send a single QR code as an inline CID attachment (all tickets share the same QR).
+    const primaryTicket = data.tickets[0];
+    const qrAttachments = primaryTicket ? [{
+      filename: 'ticket-qr.png',
+      content: dataUrlToBuffer(primaryTicket.qr_code_data),
+      cid: 'qr_code_0',
+    }] : [];
+    const ticketImageUrls = ['cid:qr_code_0'];
 
-    const result = await getResend().emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+    const result = await transporter.sendMail({
+      from: fromEmail,
       to: data.customer_email,
       subject: `Your Tickets for ${data.event_title} - Order ${data.order_id}`,
       html: generateEmailHTML(data, ticketImageUrls),
       attachments: qrAttachments,
-      replyTo: 'support@eventtickets.com',
+      replyTo: replyToEmail,
     });
-
-    if (result.error) {
-      console.error('Resend error:', result.error);
-      return {
-        success: false,
-        error: result.error.message || 'Failed to send email',
-      };
-    }
 
     return {
       success: true,
-      messageId: result.data?.id,
+      messageId: result.messageId,
     };
   } catch (error) {
     console.error('Failed to send ticket confirmation email:', error);
@@ -292,6 +296,10 @@ export async function sendPaymentReminderEmail(
   orderId: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -334,24 +342,17 @@ export async function sendPaymentReminderEmail(
       </html>
     `;
 
-    const result = await getResend().emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+    const result = await transporter.sendMail({
+      from: fromEmail,
       to: email,
       subject: `Payment Reminder: ${eventTitle} - Order ${orderId}`,
       html,
-      replyTo: 'support@eventtickets.com',
+      replyTo: replyToEmail,
     });
-
-    if (result.error) {
-      return {
-        success: false,
-        error: result.error.message || 'Failed to send email',
-      };
-    }
 
     return {
       success: true,
-      messageId: result.data?.id,
+      messageId: result.messageId,
     };
   } catch (error) {
     console.error('Failed to send payment reminder email:', error);
@@ -369,6 +370,10 @@ export async function sendStaffInviteEmail(params: {
   inviterName?: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
     const inviter = params.inviterName ? `${params.inviterName} ` : 'An event organizer ';
     const html = `
       <!DOCTYPE html>
@@ -390,14 +395,15 @@ export async function sendStaffInviteEmail(params: {
       </html>
     `;
 
-    const result = await getResend().emails.send({
-      from: 'SportEvents <noreply@sportevents.ie>',
+    const result = await transporter.sendMail({
+      from: fromEmail,
       to: params.email,
       subject: `Staff invite for ${params.eventTitle}`,
       html,
+      replyTo: replyToEmail,
     });
 
-    return { success: true, messageId: result.data?.id };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('Failed to send staff invite email:', error);
     return {
@@ -407,6 +413,9 @@ export async function sendStaffInviteEmail(params: {
   }
 }
 
+/**
+ * Sends notification email when an event's date or venue changes
+ */
 export async function sendEventChangeEmail(params: {
   email: string;
   eventTitle: string;
@@ -415,6 +424,10 @@ export async function sendEventChangeEmail(params: {
   changes: { dateChanged?: boolean; venueChanged?: boolean };
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
     const changeParts: string[] = [];
     if (params.changes.dateChanged) changeParts.push('date/time');
     if (params.changes.venueChanged) changeParts.push('venue');
@@ -442,14 +455,15 @@ export async function sendEventChangeEmail(params: {
       </html>
     `;
 
-    const result = await getResend().emails.send({
-      from: 'SportEvents <noreply@sportevents.ie>',
+    const result = await transporter.sendMail({
+      from: fromEmail,
       to: params.email,
       subject: `Event Update: ${params.eventTitle}`,
       html,
+      replyTo: replyToEmail,
     });
 
-    return { success: true, messageId: result.data?.id };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('Failed to send event change email:', error);
     return {
@@ -459,12 +473,19 @@ export async function sendEventChangeEmail(params: {
   }
 }
 
+/**
+ * Sends email when a user is invited to co-manage an event
+ */
 export async function sendCoOrganizerInviteEmail(params: {
   email: string;
   eventTitle: string;
   inviterName: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      throw new Error('SMTP credentials are not configured');
+    }
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -484,14 +505,15 @@ export async function sendCoOrganizerInviteEmail(params: {
       </html>
     `;
 
-    const result = await getResend().emails.send({
-      from: 'SportEvents <noreply@sportevents.ie>',
+    const result = await transporter.sendMail({
+      from: fromEmail,
       to: params.email,
       subject: `Co-organizer invite for ${params.eventTitle}`,
       html,
+      replyTo: replyToEmail,
     });
 
-    return { success: true, messageId: result.data?.id };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('Failed to send co-organizer invite email:', error);
     return {
