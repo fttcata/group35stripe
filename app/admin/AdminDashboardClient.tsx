@@ -23,6 +23,18 @@ interface Props {
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+function downloadCsvFile(filename: string, csvContent: string) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', filename)
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
 export default function AdminDashboardClient({ profiles = [], events = [], orders = [] }: Props) {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -292,11 +304,15 @@ export default function AdminDashboardClient({ profiles = [], events = [], order
                             className="text-red-600 hover:text-red-900 font-medium disabled:cursor-not-allowed disabled:opacity-50"
                             disabled={deletingEventId === event.id}
                             onClick={async () => {
-                              if (!window.confirm('Delete this event?')) return
+                              if (!window.confirm('Delete this event? If any tickets were sold, a receipts CSV will download automatically.')) return
 
                               try {
                                 setDeletingEventId(event.id)
-                                await deleteEvent(event.id)
+                                const result = await deleteEvent(event.id)
+                                if (result?.receiptsCsv && result?.receiptsFilename) {
+                                  downloadCsvFile(result.receiptsFilename, result.receiptsCsv)
+                                  window.alert(`Event deleted. Downloaded receipts for ${result.archivedOrders} order(s).`)
+                                }
                                 router.refresh()
                               } catch (error) {
                                 console.error('Failed to delete event:', error)
