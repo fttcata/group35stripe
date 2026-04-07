@@ -221,7 +221,16 @@ export default function SubmitEventPage() {
       setFormData(newFormData)
       setOriginalEventData(newFormData)
       
-      setTicketTypes(ticketTypesData.length > 0 ? ticketTypesData : [{ name: 'General', price: 0, quantity: 0 }])
+      const uniqueTickets: TicketType[] = []
+      const seenKeys = new Set<string>()
+      for (const ticket of ticketTypesData) {
+        const key = `${ticket.name}|${ticket.price}|${ticket.quantity}`
+        if (seenKeys.has(key)) continue
+        seenKeys.add(key)
+        uniqueTickets.push(ticket)
+      }
+
+      setTicketTypes(uniqueTickets.length > 0 ? uniqueTickets : [{ name: 'General', price: 0, quantity: 0 }])
     } catch (err) {
       setError('Failed to load event')
       console.error(err)
@@ -444,56 +453,26 @@ export default function SubmitEventPage() {
             .delete()
             .in('id', toDelete as number[])
 
-          if (deleteError) {
-            setError(`Failed to delete removed ticket types: ${deleteError.message}`)
-            setIsSubmitting(false)
-            return
-          }
+        if (deleteError) {
+          console.error('Failed to delete old tickets:', deleteError)
         }
 
-        // Update existing and insert new
-        for (const ticket of validTickets) {
-          const sold = ticket.sold || 0
-          if (ticket.id) {
-            if (sold > 0 && ticket.quantity < sold) {
-              setError(`Quantity for "${ticket.name}" cannot be less than tickets sold (${sold}).`)
-              setIsSubmitting(false)
-              return
-            }
+        const ticketRows = validTickets.map((ticket) => ({
+          event_id: eventId,
+          name: ticket.name,
+          price: ticket.price,
+          quantity: ticket.quantity,
+          quantity_available: ticket.quantity,
+        }))
 
-            const available = Math.max(0, ticket.quantity - sold)
-            const { error: updateTicketError } = await supabase
-              .from('ticket_types')
-              .update({
-                name: ticket.name,
-                price: ticket.price,
-                quantity: ticket.quantity,
-                quantity_available: available,
-              })
-              .eq('id', ticket.id)
+        const { error: ticketInsertError } = await supabase
+          .from('ticket_types')
+          .insert(ticketRows)
 
-            if (updateTicketError) {
-              setError(`Failed to update ticket type: ${updateTicketError.message}`)
-              setIsSubmitting(false)
-              return
-            }
-          } else {
-            const { error: insertTicketError } = await supabase
-              .from('ticket_types')
-              .insert({
-                event_id: eventId,
-                name: ticket.name,
-                price: ticket.price,
-                quantity: ticket.quantity,
-                quantity_available: ticket.quantity,
-              })
-
-            if (insertTicketError) {
-              setError(`Failed to add ticket type: ${insertTicketError.message}`)
-              setIsSubmitting(false)
-              return
-            }
-          }
+        if (ticketInsertError) {
+          setError(`Failed to save ticket types: ${ticketInsertError.message}`)
+          setIsSubmitting(false)
+          return
         }
 
         // TODO: Send notifications if date or venue changed and event is published
@@ -522,7 +501,10 @@ export default function SubmitEventPage() {
         if (publish) {
           setPublishSuccess(true)
         } else {
-          router.push(editReturnPath)
+          setSaveNotice('Changes saved.')
+          setOriginalEventData({
+            ...formData,
+          })
         }
       } else {
         // CREATE new event

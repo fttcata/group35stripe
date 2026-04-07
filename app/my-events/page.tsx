@@ -119,7 +119,7 @@ export default function MyEventsPage() {
             // Try to fetch tickets with quantity field
             const { data: tickets, error: ticketError } = await supabase
               .from('ticket_types')
-              .select('name,price,quantity,id')
+              .select('name,price,quantity,quantity_available,id')
               .eq('event_id', event.id)
 
             if (ticketError) {
@@ -152,53 +152,72 @@ export default function MyEventsPage() {
 
             // Count sold tickets per event using completed orders
             let totalSold = 0
-            const totalTickets = (tickets || []).reduce((sum, t) => sum + (t.quantity || 0), 0)
+            const totalTickets = (tickets || []).reduce(
+              (sum, t: any) => sum + (Number(t.quantity_available ?? t.quantity ?? 0) || 0),
+              0
+            )
 
+            // Prefer server-side sales analytics (handles RLS)
+            let salesApiOk = false
             try {
-              // Fetch all completed orders for this event
-              const { data: orders } = await supabase
-                .from('orders')
-                .select('id')
-                .eq('event_id', event.id)
-                .in('payment_status', ['completed', 'completed_email_failed'])
-
-              if (orders && orders.length > 0) {
-                const orderIds = orders.map(o => o.id)
-
-                // Prefer order_items quantity, then fallback to tickets count
-                const { data: orderItems } = await supabase
-                  .from('order_items')
-                  .select('quantity')
-                  .in('order_id', orderIds)
-
-                if (orderItems && orderItems.length > 0) {
-                  totalSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
-                } else {
-                  // Fallback: count tickets rows
-                  const { data: ticketRows } = await supabase
-                    .from('tickets')
-                    .select('id, order_id')
-                    .in('order_id', orderIds)
-
-                  if (ticketRows && ticketRows.length > 0) {
-                    const ticketsByOrder: Record<string, number> = {}
-                    for (const t of ticketRows) {
-                      ticketsByOrder[t.order_id] = (ticketsByOrder[t.order_id] || 0) + 1
-                    }
-                    totalSold = Object.values(ticketsByOrder).reduce((sum, qty) => sum + qty, 0)
-                  }
-                }
+              const res = await fetch(`/api/events/${event.id}/sales`)
+              if (res.ok) {
+                const data = await res.json()
+                const apiSold = Number(data?.ticketsSold || 0)
+                totalSold = Number.isFinite(apiSold) ? apiSold : 0
+                salesApiOk = true
               }
             } catch (err) {
-              // If error fetching sold counts, continue with totalSold = 0
-              console.debug(`Error counting sold tickets for event ${event.id}:`, err)
+              console.debug(`Sales API fetch failed for event ${event.id}:`, err)
+            }
+
+            if (!salesApiOk) {
+              try {
+                // Fetch all completed orders for this event
+                const { data: orders } = await supabase
+                  .from('orders')
+                  .select('id')
+                  .eq('event_id', event.id)
+                  .in('payment_status', ['completed', 'completed_email_failed'])
+
+                if (orders && orders.length > 0) {
+                  const orderIds = orders.map(o => o.id)
+
+                  // Prefer order_items quantity, then fallback to tickets count
+                  const { data: orderItems } = await supabase
+                    .from('order_items')
+                    .select('quantity')
+                    .in('order_id', orderIds)
+
+                  if (orderItems && orderItems.length > 0) {
+                    totalSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+                  } else {
+                    // Fallback: count tickets rows
+                    const { data: ticketRows } = await supabase
+                      .from('tickets')
+                      .select('id, order_id')
+                      .in('order_id', orderIds)
+
+                    if (ticketRows && ticketRows.length > 0) {
+                      const ticketsByOrder: Record<string, number> = {}
+                      for (const t of ticketRows) {
+                        ticketsByOrder[t.order_id] = (ticketsByOrder[t.order_id] || 0) + 1
+                      }
+                      totalSold = Object.values(ticketsByOrder).reduce((sum, qty) => sum + qty, 0)
+                    }
+                  }
+                }
+              } catch (err) {
+                // If error fetching sold counts, continue with totalSold = 0
+                console.debug(`Error counting sold tickets for event ${event.id}:`, err)
+              }
             }
 
             // Build ticket info with per-type sold counts (if needed for display)
-            const ticketsWithSold: TicketInfo[] = (tickets || []).map(t => ({
+            const ticketsWithSold: TicketInfo[] = (tickets || []).map((t: any) => ({
               name: t.name,
               price: t.price,
-              quantity: t.quantity || 0,
+              quantity: Number(t.quantity_available ?? t.quantity ?? 0) || 0,
               sold: 0, // Per-ticket-type sold count not tracked; use totalSold for event-level
             }))
 

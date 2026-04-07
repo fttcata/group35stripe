@@ -186,7 +186,20 @@ export async function GET(
     }
 
     const revenueByType = Array.from(revenueByTypeMap.values()).sort((a, b) => b.revenue - a.revenue);
-    const ticketsSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    let ticketsSold = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+    if (ticketsSold === 0 && completedOrderIds.length > 0) {
+      const { data: ticketRows, error: ticketError } = await supabase
+        .from('tickets')
+        .select('id,order_id,created_at')
+        .in('order_id', completedOrderIds);
+
+      if (ticketError) {
+        return NextResponse.json({ error: ticketError.message }, { status: 500 });
+      }
+
+      ticketsSold = (ticketRows || []).length;
+    }
 
     const orderCreatedAtMap = new Map<string, string>();
     for (const order of completedOrders) {
@@ -195,11 +208,24 @@ export async function GET(
     }
 
     const timelineMap = new Map<string, number>();
-    for (const item of orderItems) {
-      const dateKey = orderCreatedAtMap.get(item.order_id);
-      if (!dateKey) continue;
-      const current = timelineMap.get(dateKey) || 0;
-      timelineMap.set(dateKey, current + Number(item.quantity || 0));
+    if (orderItems.length > 0) {
+      for (const item of orderItems) {
+        const dateKey = orderCreatedAtMap.get(item.order_id);
+        if (!dateKey) continue;
+        const current = timelineMap.get(dateKey) || 0;
+        timelineMap.set(dateKey, current + Number(item.quantity || 0));
+      }
+    } else if (completedOrderIds.length > 0) {
+      const { data: ticketRows } = await supabase
+        .from('tickets')
+        .select('id,order_id,created_at')
+        .in('order_id', completedOrderIds);
+
+      for (const ticket of ticketRows || []) {
+        const dateKey = new Date(ticket.created_at).toISOString().slice(0, 10);
+        const current = timelineMap.get(dateKey) || 0;
+        timelineMap.set(dateKey, current + 1);
+      }
     }
 
     const salesTimeline = Array.from(timelineMap.entries())
