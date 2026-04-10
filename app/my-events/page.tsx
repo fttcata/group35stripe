@@ -153,7 +153,8 @@ export default function MyEventsPage() {
             // Count sold tickets per event using completed orders
             let totalSold = 0
             const totalTickets = (tickets || []).reduce(
-              (sum, t: any) => sum + (Number(t.quantity_available ?? t.quantity ?? 0) || 0),
+              (sum, t: { quantity_available?: number | null; quantity?: number | null }) =>
+                sum + (Number(t.quantity_available ?? t.quantity ?? 0) || 0),
               0
             )
 
@@ -214,7 +215,7 @@ export default function MyEventsPage() {
             }
 
             // Build ticket info with per-type sold counts (if needed for display)
-            const ticketsWithSold: TicketInfo[] = (tickets || []).map((t: any) => ({
+            const ticketsWithSold: TicketInfo[] = (tickets || []).map((t: { name: string; price: number; quantity?: number | null; quantity_available?: number | null }) => ({
               name: t.name,
               price: t.price,
               quantity: Number(t.quantity_available ?? t.quantity ?? 0) || 0,

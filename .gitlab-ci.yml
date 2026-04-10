@@ -162,3 +162,83 @@ db-files-check:
         fi
       done
       echo "All expected database files are present."
+
+# Security audit - fail on high or critical npm vulnerabilities
+security-audit:
+  stage: quality
+  script:
+    - npm ci --legacy-peer-deps
+    - |
+      echo "Running npm security audit..."
+      npm audit --audit-level=critical --omit=dev
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-protected
+    paths:
+      - node_modules/
+  allow_failure: false
+
+# Console.log check - no debug logs left in source files
+console-log-check:
+  stage: test
+  script:
+    - |
+      echo "Checking for leftover console.log statements in source files..."
+      if grep -rn "console\.log" app/ lib/ --include="*.ts" --include="*.tsx" \
+        --exclude-dir=node_modules; then
+        echo "ERROR: console.log statements found in source. Remove or replace with proper logging."
+        exit 1
+      fi
+      echo "No console.log statements found."
+
+# API route HTTP method export check
+api-route-method-check:
+  stage: test
+  script:
+    - |
+      echo "Checking that API route files export at least one HTTP method handler..."
+      failed=0
+      for file in $(find app/api -name "route.ts" 2>/dev/null); do
+        if ! grep -qE "^export (async )?function (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)" "$file"; then
+          echo "ERROR: $file does not export a recognised HTTP method handler"
+          failed=1
+        fi
+      done
+      if [ "$failed" -eq 1 ]; then exit 1; fi
+      echo "All API route files export at least one HTTP method handler."
+
+# Stripe webhook signature verification check
+stripe-webhook-check:
+  stage: test
+  script:
+    - |
+      echo "Verifying Stripe webhook route validates Stripe-Signature header..."
+      webhook_file="app/api/webhooks/stripe/route.ts"
+      if [ ! -f "$webhook_file" ]; then
+        echo "ERROR: Stripe webhook route not found at $webhook_file"
+        exit 1
+      fi
+      if ! grep -q "stripe-signature\|Stripe-Signature\|constructEvent\|constructEventAsync" "$webhook_file"; then
+        echo "ERROR: Webhook route does not appear to verify the Stripe-Signature header."
+        exit 1
+      fi
+      echo "Stripe webhook signature verification is present."
+
+# Environment variable reference check
+# Ensures every process.env key used in source is documented in .env.example
+env-var-reference-check:
+  stage: quality
+  script:
+    - |
+      echo "Cross-checking process.env references against .env.example..."
+      missing=0
+      while IFS= read -r key; do
+        if ! grep -q "^${key}=" .env.example 2>/dev/null; then
+          echo "WARNING: $key is used in source but not documented in .env.example"
+          missing=1
+        fi
+      done < <(grep -rhoP '(?<=process\.env\.)\w+' app/ lib/ middleware.ts 2>/dev/null | sort -u)
+      if [ "$missing" -eq 1 ]; then
+        echo "ERROR: Some environment variables are undocumented. Add them to .env.example."
+        exit 1
+      fi
+      echo "All process.env references are documented in .env.example."

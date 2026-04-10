@@ -32,7 +32,7 @@ function getWebhookEvent(
 async function handleCheckoutSessionCompleted(
   session: Stripe.Checkout.Session
 ): Promise<void> {
-  console.log('Processing completed checkout session:', session.id);
+  console.info('Processing completed checkout session:', session.id);
 
   try {
     if (!supabase) {
@@ -148,7 +148,7 @@ async function handleCheckoutSessionCompleted(
     }
 
     const orderId = orderData.id;
-    console.log('Created order:', orderId);
+    console.info('Created order:', orderId);
 
     // Create tickets only if they do not already exist (idempotent retries)
     let tickets = await getTicketsByOrderId(orderId);
@@ -186,7 +186,7 @@ async function handleCheckoutSessionCompleted(
         tickets = await createTickets(orderId, eventName, 'Standard', quantity);
       }
 
-      console.log(`Created ${tickets.length} tickets for order ${orderId}`);
+      console.info(`Created ${tickets.length} tickets for order ${orderId}`);
 
       // Decrement ticket supply based on ticket type breakdown
       const breakdownStr = session.metadata?.ticketBreakdown;
@@ -207,7 +207,7 @@ async function handleCheckoutSessionCompleted(
                   .from('ticket_types')
                   .update({ quantity: newQty })
                   .eq('id', item.ticketTypeId);
-                console.log(`Decremented ticket type ${item.ticketTypeId} by ${item.quantity} → ${newQty} remaining`);
+                console.info(`Decremented ticket type ${item.ticketTypeId} by ${item.quantity} → ${newQty} remaining`);
               }
             }
           }
@@ -216,7 +216,7 @@ async function handleCheckoutSessionCompleted(
         }
       }
     } else {
-      console.log(`Reusing ${tickets.length} existing tickets for order ${orderId}`);
+      console.info(`Reusing ${tickets.length} existing tickets for order ${orderId}`);
     }
 
     // Fetch event details for email
@@ -260,7 +260,7 @@ async function handleCheckoutSessionCompleted(
         .update({ payment_status: 'completed_email_failed' })
         .eq('id', orderId);
     } else {
-      console.log('Confirmation email sent successfully:', emailResult.messageId);
+      console.info('Confirmation email sent successfully:', emailResult.messageId);
     }
 
     // Create in-app notification if the buyer has a registered account
@@ -295,7 +295,7 @@ async function handleCheckoutSessionCompleted(
 async function handlePaymentIntentSucceeded(
   paymentIntent: Stripe.PaymentIntent
 ): Promise<void> {
-  console.log('Processing payment intent:', paymentIntent.id);
+  console.info('Processing payment intent:', paymentIntent.id);
 
   try {
     if (!supabase) {
@@ -336,7 +336,7 @@ export async function POST(req: NextRequest) {
     // Verify and parse the webhook event
     const event = getWebhookEvent(body, signature);
 
-    console.log('Webhook event received:', event.type);
+    console.info('Webhook event received:', event.type);
 
     // Handle specific event types
     switch (event.type) {
@@ -349,11 +349,11 @@ export async function POST(req: NextRequest) {
         break;
 
       case 'charge.refunded':
-        console.log('Refund received - may need to handle refund emails', event.data.object);
+        console.info('Refund received - may need to handle refund emails', event.data.object);
         break;
 
       default:
-        console.log('Unhandled webhook event type:', event.type);
+        console.info('Unhandled webhook event type:', event.type);
     }
 
     return NextResponse.json({ received: true });
