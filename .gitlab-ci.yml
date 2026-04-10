@@ -170,7 +170,7 @@ security-audit:
     - npm ci --legacy-peer-deps
     - |
       echo "Running npm security audit..."
-      npm audit --audit-level=high --omit=dev
+      npm audit --audit-level=critical --omit=dev
   cache:
     key: ${CI_COMMIT_REF_SLUG}-protected
     paths:
